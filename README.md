@@ -68,7 +68,7 @@ data lämnar datorn.
 
 ### 4. Kör som MCP-server
 
-MCP-servern (`mcp_server/server.py`) exponerar 54 primära verktyg över `stdio` — 36 läsande och 17 som föreslår åtgärder utan att utföra dem (samt 31 domänspecifika alias, totalt 85). Alla är spärrade tills villkoren godkänts enligt steg 2; `visa_anvandarvillkor` går alltid att anropa och visar villkoren.
+MCP-servern (`mcp_server/server.py`) exponerar 54 primära verktyg över `stdio` — 37 läsande, 16 som föreslår åtgärder utan att utföra dem, och `visa_anvandarvillkor` (samt 31 domänspecifika alias, totalt 85). Alla är spärrade tills villkoren godkänts enligt steg 2; `visa_anvandarvillkor` går alltid att anropa och visar villkoren.
 
 När den godkänts loggas varje anrop, med alla argument, automatiskt i `.system_generated/logs/` (eller den sökväg `SIE_MCP_LOGGKATALOG` pekar på). Du kan även följa trafiken i realtid i appens loggflik.
 

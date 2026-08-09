@@ -446,17 +446,38 @@ Håller inte likheten pekar det antingen på en fil med avvikande
 bokslutsprocess eller ett datafel — värt att flagga för användaren i en
 senare version, men ingen blockerande valideringsregel i Modul 1 v1.
 
-### Facit — referensfil `SIE4_Exempelfil.SE`, räkenskapsår 0 (2021)
+### Facit — referensfil `SIE4_Exempelfil.SE`, räkenskapsår 0 (2025)
 
 | Riktmärke | Belopp (kr) |
 |---|---|
-| Omsättning | 5 782 818,36 |
-| Resultat | 1 074 344,11 |
-| Balansomslutning | 4 257 572,13 |
-| Eget kapital (Alt B) | 3 510 572,12 |
+| Omsättning | 2 583 800,00 |
+| Resultat | 428 690,00 |
+| Balansomslutning | 3 457 690,00 |
+| Eget kapital (Alt B) | 2 267 690,00 |
 
-Dessa värden är manuellt räknade fram och verifierade mot filens råa
-`#RES`/`#UB`-rader (se `test_vasentlighet.py`) och utgör facit för TDD-arbetet.
+Dessa värden är facit för TDD-arbetet och kontrolleras av
+`test_vasentlighet.py`.
+
+> [!IMPORTANT]
+> **Exempelfilen genereras — redigera den inte för hand.**
+> `samples/SIE4_Exempelfil.SE` skrivs av `samples/generera_exempelfil.py`.
+> Filen ersatte 2026-08-09 SIE-gruppens exempelfil, som är tredjeparts
+> material och inte får ligga i ett publikt kodförråd. Bolaget,
+> organisationsnummret och samtliga motpartsnamn är påhittade.
+>
+> Fem egenskaper är avsiktligt inbyggda för att testsvitens facit ska
+> förbli meningsfullt, och generatorn kommenterar var och en:
+> serie 215 med fyra `S` mot 2157:s `T` (internmönstrets stöd 4/5),
+> serie 208 med två `S` och två `T` (oavgjort röstetal, så 2084/2085 fångas
+> bara av referensmönstret), konto 2157 helt utan `#IB`/`#UB` (saldo noll,
+> inte ett påhittat värde), BAS-grupp 25 med debetsaldo (premissen för
+> balansstapelns nedflyttningslogik) och konto 1060 `Hyresrätt`
+> (cp437-regressionen mot windows-1252).
+>
+> Ändra beloppen via generatorn, kör om den, och uppdatera facit ovan samt
+> de assertions som slår. Balansräkningen räknas fram ur verifikationerna,
+> så trialbalansen går alltid jämnt ut — generatorn hävdar det med en
+> `assert`.
 
 ---
 
@@ -563,7 +584,7 @@ lagren oberoende av varandra.
 
 # Modul 3: Sekretesslager (maskering) — Arkitekturbeslut
 
-**Status:** Implementerad och testtäckt (41 tester i test_sekretesslager.py, samtliga gröna).
+**Status:** Implementerad och testtäckt (158 tester i test_sekretesslager.py, samtliga gröna).
 
 **Placering i byggordningen:** Måste köras på all data *innan* den når Modul 4–6
 (Haiku-baserade AI-anrop) och innan något framtida externt API-anrop över huvud
@@ -1056,7 +1077,7 @@ CI-status.
 **Status (uppdaterad 2026-08-06, se även "Nuvarande systemöversikt och
 utvecklingsstatus" längst ned i detta dokument för hela projektets status):**
 implementerad och verifierad, men VÄXT VÄSENTLIGT sedan v1 nedan skrevs.
-`mcp_server/server.py` exponerar numera **47** primära verktyg (samt 31 alias, totalt 78):
+`mcp_server/server.py` exponerar numera **54** primära verktyg (samt 31 alias, totalt 85):
 
 | Grupp | Antal | Vad |
 |---|---|---|
@@ -1437,7 +1458,7 @@ Samma princip som resten av projektet, applicerad på serverlagret:
 
 ```
 mcp_server/
-    server.py              # 35 primära verktyg + 28 alias + FastMCP-instansiering
+    server.py              # 54 primära verktyg + 31 alias + FastMCP-instansiering
 parser/
     spiris_session.py       # MCP-serverns EGEN Spiris-session (§2b) — delar
                              # inget med Streamlit-appens session_state
@@ -1499,14 +1520,43 @@ projektet vuxit till en fullständig Streamlit-app med en live Spiris/Visma
 eAccounting-koppling (läsning OCH skrivning), en Tool-Calling AI-agent, och
 en egen FP&A-dashboard — utöver den ursprungliga MCP-servern. Det här
 avsnittet beskriver **hela systemet som det faktiskt ser ut idag**,
-grundat i en genomgång av samtliga 26 filer i `parser/` plus `app.py` och
-`mcp_server/server.py`. Testsviten: **1074 tester, samtliga gröna**
+grundat i en genomgång av `parser/` (73 moduler plus 13 i `parser/rum/`), `app.py` och
+`mcp_server/server.py`. Testsviten: **2096 tester, samtliga gröna** (plus ett som hoppas över: ett fail-closed-fall som bara gäller icke-Windows)
 (`pytest tests/`).
+
+## 0. Kodförrådet startades om 2026-08-09 inför publicering
+
+Projektet utvecklades lokalt i 135 commits innan det gjordes publikt. Den
+historiken kunde inte följa med: den innehöll tredjeparts upphovsrättsskyddat
+referensmaterial — rättskällor, redovisningslitteratur, SIE-gruppens
+filformatsspecifikation, BAS-kontoplanen, en leverantörs avtalsvillkor och
+akademiska artiklar om gränssnittsdesign — och en commit är permanent.
+
+Kodförrådet byggdes därför om från ren mark med en **allowlist**: bara filer
+som aktivt lagts till finns här. Det är avsiktligt inte en blocklist, eftersom
+en blocklist kräver att man har hittat allt farligt, medan en allowlist bara
+kräver att man vet vad som ska med.
+
+Detta ingår därför **inte** i kodförrådet, utan ligger lokalt hos utvecklaren:
+rättskällorna och specifikationerna (som i stället citeras med källhänvisning),
+arbetsanteckningar, interna genomförandespecifikationer, engångsskript från
+tidigare ombyggnader och verktygen för demoinspelning. `.gitignore` förbjuder
+blankt PDF, kalkylblad och Office-dokument — det finns i dag ingen legitim
+sådan fil i förrådet, så förbudet kostar ingenting och fångar misstaget innan
+det blir permanent.
+
+`HISTORIK.md` bevarar samtliga 135 commit-rubriker. De är projektets egna
+meningar och kan återges; det är diffarna och referensmaterialet som inte kan.
+
+`.gitattributes` finns av en konkret anledning: `samples/SIE4_Exempelfil.SE`
+är cp437-kodad med CRLF enligt SIE-specifikationen, och utan `*.SE -text`
+normaliserar git radsluten till LF. En klon på Linux eller macOS hade då fått
+en fil som avviker från det format parsern finns för att läsa.
 
 ## 1. Två gränssnitt, en delad kärna
 
 ```
-parser/  — 26 moduler, UI-fria, fullt testbara utan Streamlit- eller
+parser/  — 73 moduler (+13 i rum/), UI-fria, testbara utan Streamlit- eller
            MCP-runtime (domänmodell, analysmotorer, Spiris-klient,
            AI-lager, FP&A)
   │
@@ -1515,7 +1565,7 @@ parser/  — 26 moduler, UI-fria, fullt testbara utan Streamlit- eller
   │                         session_state, hela skriv-vägen mot Spiris
   │
   └── mcp_server/server.py  MCP-server
-                             35 primära verktyg (§1–§3c ovan) + alias, stdio,
+                             54 primära verktyg (§1–§3c ovan) + 31 alias, stdio,
                              egen fristående Spiris-session (§2b),
                              villkorsspärr, noll skrivförmåga
 ```
