@@ -104,16 +104,32 @@ SAKERHETSNOT = (
 )
 
 
-def _envelope(data: list[dict], antal_exkluderade: int) -> dict[str, Any]:
-    """Standardiserat returobjekt med fail-closed-transparens: räknare + text
-    som talar om för LLM:en att blockerad data undanhållits."""
+def _envelope(data: list[dict], antal_exkluderade: int, offset: int = 0, limit: int = 0) -> dict[str, Any]:
+    """Standardiserat returobjekt med sidbrytning och fail-closed-transparens."""
+    totalt = len(data)
+    if limit > 0:
+        visad_data = data[offset : offset + limit]
+        trunkerat = (offset + limit) < totalt
+    else:
+        visad_data = data[offset:] if offset > 0 else data
+        trunkerat = False
+        
+    visade = len(visad_data)
     if antal_exkluderade:
         info = f"{antal_exkluderade} poster exkluderades pga olösta maskeringsbehov"
     else:
         info = "Inga poster exkluderades"
+        
+    if trunkerat:
+        nasta = offset + limit
+        info += f" | TRUNKERAT: Visar {visade} av {totalt}. Hämta resten genom att ange offset={nasta} och limit={limit}."
+        
     return {
-        "data": data,
+        "data": visad_data,
         "antal_exkluderade": antal_exkluderade,
+        "totalt_antal": totalt,
+        "visade": visade,
+        "trunkerat": trunkerat,
         "info": info,
         "sakerhetsnot": SAKERHETSNOT,
     }
@@ -230,7 +246,7 @@ async def hamta_kontosaldon(
 
 
 async def hamta_kontotransaktioner(
-    klient: _Spirisklient, räkenskapsår_id: str, kontonr: str
+    klient: _Spirisklient, räkenskapsår_id: str, kontonr: str, offset: int = 0, limit: int = 0
 ) -> dict[str, Any]:
     """Maskerade transaktionsrader för ETT konto. Bara sändningsbara
     verifikationer; blockerade utesluts men räknas."""
@@ -249,11 +265,11 @@ async def hamta_kontotransaktioner(
                         "belopp": transaktion.belopp,
                     }
                 )
-    return _envelope(data, antal_exkluderade=len(resultat.blockerade_verifikationer))
+    return _envelope(data, antal_exkluderade=len(resultat.blockerade_verifikationer), offset=offset, limit=limit)
 
 
 async def hamta_verifikationer_alla(
-    klient: _Spirisklient, fran_datum: str | None = None, till_datum: str | None = None
+    klient: _Spirisklient, fran_datum: str | None = None, till_datum: str | None = None, offset: int = 0, limit: int = 0
 ) -> dict[str, Any]:
     """Alla verifikationer med maskerad fritext."""
     råa_rader = await asyncio.to_thread(_adapter_verifikationer_alla, klient, fran_datum, till_datum)
@@ -299,7 +315,7 @@ async def hamta_verifikationer_alla(
             ny_rad["rader"] = nya_tr
             data.append(ny_rad)
             
-    return _envelope(data, len(resultat.blockerade_verifikationer))
+    return _envelope(data, len(resultat.blockerade_verifikationer), offset=offset, limit=limit)
 
 
 async def hamta_ingaende_balans(klient: _Spirisklient) -> dict[str, Any]:
@@ -491,13 +507,13 @@ async def hamta_leverantorsfakturor(klient: _Spirisklient) -> dict[str, Any]:
     return _envelope(rader, antal_exkluderade=0)
 
 
-async def hamta_kundfakturor(klient: _Spirisklient) -> dict[str, Any]:
+async def hamta_kundfakturor(klient: _Spirisklient, offset: int = 0, limit: int = 0) -> dict[str, Any]:
     """Kundfakturor med detalj. Till skillnad från kundreskontran ingår även betalda fakturor.
     
     Motpartsnamn tvättade enligt samma regel som reskontran; betalningsidentifierare hämtas aldrig.
     """
     rader = await asyncio.to_thread(_adapter_kundfakturor, klient)
-    return _envelope(rader, antal_exkluderade=0)
+    return _envelope(rader, antal_exkluderade=0, offset=offset, limit=limit)
 
 
 async def hamta_order(klient: _Spirisklient) -> dict[str, Any]:
@@ -659,21 +675,21 @@ def _kundpost_till_dict(post) -> dict[str, Any]:
     }
 
 
-async def hamta_leverantorsreskontra(klient: _Spirisklient) -> dict[str, Any]:
+async def hamta_leverantorsreskontra(klient: _Spirisklient, offset: int = 0, limit: int = 0) -> dict[str, Any]:
     """Öppna leverantörsskulder, GDPR-tvättade. Kräver ea:purchase-scope."""
     poster = await asyncio.to_thread(_adapter_reskontra, klient)
     # Egressgränsen. Adaptern lämnar klartext (lokala vyer behöver den);
     # maskeringen sker HÄR, i utflödesfunktionen, och funktionen litar aldrig
     # på att anroparen redan gjort det.
     poster = maskera_for_egress(poster)
-    return _envelope([_leverantorspost_till_dict(p) for p in poster], antal_exkluderade=0)
+    return _envelope([_leverantorspost_till_dict(p) for p in poster], antal_exkluderade=0, offset=offset, limit=limit)
 
 
-async def hamta_kundreskontra_rag(klient: _Spirisklient) -> dict[str, Any]:
+async def hamta_kundreskontra_rag(klient: _Spirisklient, offset: int = 0, limit: int = 0) -> dict[str, Any]:
     """Öppna kundfordringar, GDPR-tvättade. Kräver ea:sales-scope."""
     poster = await asyncio.to_thread(_adapter_kundreskontra, klient)
     poster = maskera_for_egress(poster)  # egressgränsen, se ovan
-    return _envelope([_kundpost_till_dict(p) for p in poster], antal_exkluderade=0)
+    return _envelope([_kundpost_till_dict(p) for p in poster], antal_exkluderade=0, offset=offset, limit=limit)
 
 
 async def hamta_kundbetalbeteende(klient: _Spirisklient) -> dict[str, Any]:
@@ -806,7 +822,7 @@ def hamta_periodiseringar(klient: _Spirisklient) -> list[dict]:
     return rader
 
 
-async def hamta_underlag(klient, include_matched: bool) -> dict:
+async def hamta_underlag(klient, include_matched: bool, offset: int = 0, limit: int = 0) -> dict:
     from parser.spiris_adapter import _adapter_underlag
     from parser.sekretesslager import skapa_kontonamnsmaskerare
     
@@ -834,7 +850,7 @@ async def hamta_underlag(klient, include_matched: bool) -> dict:
             "leverantorsnamn": maskera(r.get("SupplierName") or "")
         })
         
-    return _envelope(tvattad, antal_exkluderade=0)
+    return _envelope(tvattad, antal_exkluderade=0, offset=offset, limit=limit)
 
 
 
