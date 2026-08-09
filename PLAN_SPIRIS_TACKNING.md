@@ -1,6 +1,6 @@
 # Exekverbar plan — full Spiris-täckning
 
-> **STATUS:** Etapp 0-5 är genomförda och testerna är godkända (2223 passed). Arbetet är pausat vid GRIND 5 i väntan på godkännande för Etapp 6.
+> **STATUS:** Etapp 0-6 är genomförda och testerna är godkända (2226 passed). Arbetet är pausat vid GRIND 6 i väntan på godkännande för Etapp 7.
 
 **Läs `ARKITEKTUR_SPIRIS_TACKNING.md` först.** Den motiverar varje beslut
 nedan. Det här dokumentet innehåller bara utförandet.
@@ -729,7 +729,7 @@ läser, och den ska bära modellen.
 
 **Tester (minst 6).**
 
-**GRIND 6.** Rapportera och stanna.
+**GRIND 6.** Rapportera och stanna. (KLART)
 
 ---
 
