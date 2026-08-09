@@ -1,0 +1,12 @@
+# Källkod och dokumentation: normalisera till LF i förrådet, checka ut med
+# plattformens egna radslut. Utan detta blir förrådet en blandning, eftersom
+# filerna skrivits på Windows under olika perioder.
+* text=auto
+
+# SIE4-filer är cp437-kodade med CRLF som radslut enligt SIE-specifikationen
+# (utgåva 4C, §5.8) och får INTE radslutsnormaliseras. Utan denna rad lagras
+# exempelfilen med LF, och en klon på Linux eller macOS får då en fil som
+# avviker från formatet — vilket är precis det parsern finns för att läsa.
+*.SE -text
+*.sie -text
+*.si -text

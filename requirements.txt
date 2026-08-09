@@ -1,0 +1,23 @@
+# MCP Python SDK, stabila v1.x-grenen. v2.0 byter huvudklassnamn till
+# MCPServer och är inte släppt än — se ARCHITECTURE_tillagg_mcp_brygga.md §2.
+mcp[cli]>=1.28,<2.0
+
+# Officiella Anthropic Python SDK:t — parser/haiku_klient.py:s riktiga
+# API-anrop mot Haiku. Se ARCHITECTURE_tillagg_modul5.md (Gap 3b).
+anthropic
+
+# Lokal UI-app, se app.py.
+streamlit
+
+# Vattenfallsdiagram i FP&A-dashboardens kassaflödesflik (fpa_dashboard.py).
+plotly
+
+# Rena REST-anrop mot OpenAIs och Googles modell-listnings-API:er i
+# parser/ai_konfiguration.py — medvetet valt framför att lägga till hela
+# openai- och google-generativeai-SDK:erna bara för att lista modeller.
+httpx
+
+# Spara/ladda app-inställningar till en lokal (gitignorerad) .env-fil, samt
+# Fernet-kryptering av maskeringsliggaren (mask_dict.enc), se parser/app_config.py.
+python-dotenv
+cryptography

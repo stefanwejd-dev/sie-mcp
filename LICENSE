@@ -1,0 +1,93 @@
+MIT License
+
+Copyright (c) 2026 sie-mcp Utvecklare och Bidragsgivare
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------------
+SÄRSKILT TILLÄGG: ANSVARSFRISKRIVNING FÖR RESULTAT, RÅDGIVNING, DATASKYDD OCH AI
+(ADDITIONAL DISCLAIMER — OUTPUT, ADVICE, DATA PROTECTION AND AI REGULATION)
+
+Detta tillägg utvidgar inte de rättigheter MIT-licensen ovan ger, och inskränker
+dem inte. Det förtydligar den ansvarsfriskrivning som redan följer av licensens
+"AS IS"-villkor. Fullständiga användarvillkor: DISCLAIMER_AND_TERMS.md.
+
+1. LOKAL KLIENTMJUKVARA, INGEN TJÄNST:
+sie-mcp är en lokalt exekverad programvara (klientmjukvara / MCP-server) som
+tillhandahålls som fri öppen källkod, utan ersättning. Upphovsmännen och
+bidragsgivarna driver ingen molntjänst, samlar inte in någon data, har ingen
+åtkomst till slutanvändarens API-nycklar (BYOK), OAuth-sessioner eller
+bokföringsdata, äger inga servrar dit information överförs, och tillhandahåller
+ingen drift, support eller underhåll.
+
+2. INGA UTFÄSTELSER OM RESULTATENS RIKTIGHET:
+Programvaran lämnar inga garantier. Siffror, tabeller, analyser, nyckeltal,
+klassificeringar och AI-genererade svar som programvaran producerar utgör INTE
+en utsaga om faktiska förhållanden, kan vara felaktiga eller påhittade, och kan
+inte antas motsvara verkligheten eller den underliggande bokföringen.
+Slutanvändaren ansvarar ensam för att självständigt verifiera varje uppgift mot
+originalkällan innan den används.
+
+3. INGEN PROFESSIONELL RÅDGIVNING:
+Programvaran utgör inte revisions-, redovisnings-, skatte-, finansiell eller
+juridisk rådgivning och ersätter inte slutanvändarens egen professionella
+bedömning enligt ISA, god revisionssed, god redovisningssed, BFN:s allmänna råd
+(K2/K3), bokföringslagen eller annan tillämplig reglering. Inget uppdrags- eller
+rådgivningsförhållande uppstår gentemot upphovsmännen.
+
+4. INGEN UTFÄSTELSE OM EFTERLEVNAD AV LAG:
+Programvaran gör inget anspråk på, och lämnar ingen utfästelse om, att den eller
+slutanvändarens användning av den uppfyller dataskyddsförordningen (EU 2016/679),
+dataskyddslagen, krav på personuppgiftsbiträdesavtal, AI-förordningen
+(EU 2024/1689), bokföringslagen eller någon annan lagstiftning. Att bedöma och
+säkerställa att användningen är laglig åligger helt och hållet slutanvändaren.
+
+5. INGET PERSONUPPGIFTSANSVAR ELLER BITRÄDESANSVAR:
+Upphovsmännen behandlar inga personuppgifter för slutanvändarens räkning och
+agerar varken Personuppgiftsansvarig (Controller) eller Personuppgiftsbiträde
+(Processor). Slutanvändaren (den som laddar ner, driftsätter eller använder
+programvaran) bär det fulla, ensamma och oinskränkta ansvaret gentemot sina egna
+klienter, anställda, registrerade personer och tillsynsmyndigheter.
+
+6. UNDERBITRÄDESAVTAL (DPA) OCH TREDJELANDSÖVERFÖRING (BYOK/BYOA):
+Eftersom programvaran ansluter till externa AI- och affärssystemstjänster
+(exempelvis Anthropic, OpenAI, Visma/Spiris) med slutanvändarens egna
+API-nycklar, utvecklarkonton eller OAuth-uppgifter, ingås alla avtalsrelationer
+och personuppgiftsbiträdesavtal direkt mellan slutanvändaren och respektive
+leverantör. Slutanvändaren ansvarar ensam för laglig grund (Art. 6 GDPR),
+konsekvensbedömning (Art. 35), behandlingsregister (Art. 30), giltig
+överföringsmekanism (kapitel V) och för att följa leverantörens egna villkor.
+
+7. MASKERINGSFUNKTIONEN ÄR ETT HJÄLPMEDEL UTAN GARANTI:
+Programvarans maskerings- och pseudonymiseringsfunktion tillhandahålls enbart som
+ett tekniskt hjälpmedel. Den är ofullständig, har kända dokumenterade
+begränsningar (se DISCLAIMER_AND_TERMS.md avsnitt 6) och kan släppa igenom
+personuppgifter i klartext till en extern mottagare utan varning. Den garanterar
+inte att behandlad data utgör anonymiserad information i GDPR:s mening. Den får
+inte förlitas på som ett dataskydd. Programvaran beskrivs inte som säker och är
+inte säkerhetsgranskad av tredje part.
+
+8. AI-FÖRORDNINGEN (EU 2024/1689):
+Programvaran publiceras utan ersättning under en fri licens för öppen källkod.
+Bedömningen är att undantaget i artikel 2.12 därmed är tillämpligt, under
+förutsättning att programvaran inte tillhandahålls mot betalning eller som
+kommersiell tjänst och inte används på ett sätt som gör den till ett
+högrisksystem. Detta är en bedömning, inte en utfästelse. Den som i yrkesmässig
+verksamhet driftsätter eller använder programvaran ansvarar ensam för efterlevnad
+av tillämpliga krav enligt AI-förordningen och svensk lag.

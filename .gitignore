@@ -1,0 +1,110 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Spiris OAuth-session (access/refresh-token — får ALDRIG committas)
+.spiris_session.json
+
+# Lokalt maskeringsminne (redan granskade verifikations-ID) — maskindata
+masking_memory.json
+
+# Krypterad maskeringsliggare (namn -> mask, Fernet). Chiffertext, men lokal.
+mask_dict.enc
+
+# Krypterad undantagslista (strängar som bedömts som icke-PII, Fernet).
+allowlist.enc
+
+# Krypterat konteringsminne (kund -> godkänt konteringsmönster, Fernet).
+konteringsminne.enc
+
+# Lokal AI-utflödeslogg (Art. 30-metadata: tidpunkt/mottagare/datakategorier).
+# Ingen PII, men maskindata — hör inte i git.
+ai_utflodeslogg.jsonl
+
+# Genererade loggar och lokal körtidsstate.
+.system_generated/
+
+# Valfri lokal namnreferens (extra namn till Lager 3a). Kan bära riktiga namn.
+namnreferens.txt
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# mypy / ruff / pyright
+.mypy_cache/
+.ruff_cache/
+pyrightconfig.json
+
+# Claude Code local settings (machine-specific)
+.claude/
+settings.json
+
+# Jupyter
+.ipynb_checkpoints/
+
+# --- Skydd mot att lokalt referensmaterial vandrar in ----------------------
+#
+# Detta kodförråd är publikt, och en commit är permanent. Arbetsmaterialet —
+# rättskällor, redovisningslitteratur, SIE-gruppens filformatsspecifikation,
+# BAS-kontoplanen, leverantörsvillkor, akademiska artiklar, skärmdumpar från
+# riktiga affärssystemskonton och SCB:s namnlistor — är antingen tredjeparts
+# upphovsrättsskyddade texter eller kan bära verkliga kund- och
+# leverantörsuppgifter. Ingenting av det hör hit. Det ligger i den lokala
+# arkivmappen; se HISTORIK.md.
+#
+# Reglerna är breda med avsikt: det finns i dag ingen legitim PDF, inget
+# kalkylblad och inget Office-dokument i förrådet, så ett blankt förbud kostar
+# ingenting och fångar misstaget innan det blir permanent. Behövs ett undantag
+# någon gång läggs det till uttryckligen med en rad som förklarar varför.
+
+*.pdf
+*.xls
+*.xlsx
+*.doc
+*.docx
+*.ppt
+*.pptx
+*.csv
+
+# Skärmdumpar och inspelningar från riktiga konton.
+*_spiris.png
+recordings/
+browser_user_data/
+
+# Arbetsanteckningar och sessionsmaterial.
+Dagsrapporter/
+implementation_plan*.md
+architecture_diff.txt
+kontroll.md
+svar1.md
