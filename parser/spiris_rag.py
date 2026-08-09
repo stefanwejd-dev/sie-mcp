@@ -36,8 +36,9 @@ from fpa_motor import (
 from fpa_vy import likviditetsprognos_fran_reskontra
 from reskontra_tvatt import maskera_for_egress
 from namnreferens import las_namnreferens
-from sekretesslager import maskera_siefil, skapa_kontonamnsmaskerare
+from sekretesslager import maskera_siefil, skapa_kontonamnsmaskerare, skapa_motpartsmaskerare
 from spiris_adapter import (
+    hamta_kvittningskandidater as _adapter_kvittningskandidater,
     mappa_konto,
     mappa_saldon,
     mappa_verifikation,
@@ -843,3 +844,18 @@ async def hamta_underlag_fil(klient, underlag_id: str) -> dict:
     data = await asyncio.to_thread(_adapter_hamta_underlag_fil, klient, underlag_id)
     from parser.spiris_rag import _envelope
     return _envelope(data, antal_exkluderade=0)
+
+async def hamta_kvittningskandidater(klient, faktura_id: str) -> list[dict]:
+    kandidater = await asyncio.to_thread(_adapter_kvittningskandidater, klient, faktura_id)
+    maskerare = skapa_motpartsmaskerare(las_namnreferens())
+    return [
+        {
+            "faktura_id": k.get("InvoiceId") or "",
+            "fakturanr": k.get("InvoiceNumber") or "",
+            "fakturadatum": k.get("InvoiceDate") or "",
+            "leverantor": maskerare(k.get("SupplierName") or ""),
+            "kvarvarande": str(k.get("RemainingAmount") or "0"),
+            "valuta": k.get("CurrencyCode") or "",
+        }
+        for k in kandidater
+    ]

@@ -73,6 +73,7 @@ GILTIGA_TYPER = (
     "kund",
     "kundfaktura",
     "verifikat",
+    "betalningsverifikat",
     "fakturautskick",
     "betalningspaminnelse",
     "betalningsregistrering",

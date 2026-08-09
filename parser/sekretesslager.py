@@ -953,3 +953,18 @@ def uppdatera_efter_granskning(
         sandningsbara_verifikationer=sandningsbara,
         prosa_sandningsbar=_prosa_sandningsbar(maskerad.prosa, sammanslagna),
     )
+
+
+def skapa_motpartsmaskerare(referenslista: set[str] | None = None):
+    pseudonym_for: dict[str, str] = {}
+    
+    def maskera(namn: str) -> str:
+        if not namn:
+            return namn
+        if namn not in pseudonym_for:
+            nummer = len(pseudonym_for) + 1
+            pseudonym_for[namn] = f"Fiktiv Motpart {nummer} 🛑"
+        return pseudonym_for[namn]
+        
+    maskera.kodnyckel = lambda: pseudonym_for
+    return maskera

@@ -77,6 +77,7 @@ from mcp_server.server import (
     spiris_sie4export,
     spiris_underlag,
     spiris_hamta_underlag,
+    spiris_kvittningskandidater,
 )
 
 _COMPANY = {"Name": "Testbolag AB", "CorporateIdentityNumber": "556677-8899",
@@ -280,6 +281,7 @@ ALLA_SPIRISVERKTYG = {
     "spiris_kundreskontraposter": lambda: spiris_kundreskontraposter(),
     "spiris_anvandare": lambda: spiris_anvandare(),
     "spiris_underlag": lambda: spiris_underlag(),
+    "spiris_kvittningskandidater": lambda: spiris_kvittningskandidater("123"),
     "spiris_hamta_underlag": lambda: spiris_hamta_underlag("123"),
 }
 

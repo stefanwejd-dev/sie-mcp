@@ -2553,3 +2553,54 @@ async def forbered_utkastbokforing(
     return await _kor_utkastverktyg(
         _bygg, ctx, f"Förslag: bokför {utkasttyp}utkast {utkast_id}", sammanfattning
     )
+
+@mcp.tool()
+async def spiris_kvittningskandidater(faktura_id: str) -> dict:
+    '''Hämtar kvittningskandidater för en kreditfaktura (leverantör).'''
+    return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_kvittningskandidater(k, faktura_id), KATEGORI_RESKONTRA)
+
+@mcp.tool()
+async def forbered_betalningsverifikat(
+    beskrivning: str,
+    transaktionsdatum: str,
+    rader: list[dict],
+    ctx: Context | None = None,
+) -> dict:
+    '''Förbereder ett betalningsverifikat för över- eller underbetalning.
+    
+    rader: lista med {"konto": kontonummer, "debet": tal, "kredit": tal, "text": radtext}.
+    Måste balansera.'''
+    _rensade: list[dict] = []
+    _debet = _kredit = 0.0
+    for _rad in rader:
+        _d = float(_rad.get("debet") or 0)
+        _k = float(_rad.get("kredit") or 0)
+        _rensade.append({
+            "konto": str(_rad.get("konto") or ""), "debet": _d, "kredit": _k,
+            "text": str(_rad.get("text") or ""),
+        })
+        _debet += _d
+        _kredit += _k
+    sammanfattning = [
+        ["Beskrivning", beskrivning],
+        ["Datum", transaktionsdatum],
+        ["Debet", f"{_debet:,.2f}"],
+        ["Kredit", f"{_kredit:,.2f}"],
+    ]
+    _balanserar = abs(_debet - _kredit) <= 0.005 and bool(_rensade)
+
+    def _bygg():
+        if not _balanserar:
+            raise ValueError(f"Verifikatet balanserar inte! Debet: {_debet:.2f}, Kredit: {_kredit:.2f}")
+
+        nyttolast = {
+            "beskrivning": beskrivning,
+            "transaktionsdatum": transaktionsdatum,
+            "rader": _rensade,
+        }
+        u = utkast.skapa("betalningsverifikat", nyttolast, sammanfattning)
+        return _utkastsvar(u, f"Ett betalningsverifikat på {_debet:,.2f} kr föreslås.")
+
+    return await _kor_utkastverktyg(
+        _bygg, ctx, f"Förslag: betalningsverifikat på {_debet:,.2f} kr", sammanfattning if _balanserar else None
+    )

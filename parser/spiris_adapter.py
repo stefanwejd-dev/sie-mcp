@@ -790,6 +790,10 @@ def utfor_utkast(
             return skapa_verifikatutkast(klient, payload)
         return skapa_verifikat(klient, payload)
 
+    if typ == UTKASTTYP_BETALNINGSVERIFIKAT:
+        payload = _bygg_betalningsverifikat_payload(nyttolast)
+        return skapa_betalningsverifikat(klient, payload)
+
     raise SpirisKlientFel(f"Okänd utkasttyp: {typ!r}.")
 
 
@@ -2395,6 +2399,7 @@ def utfor_saljdokumentatgard(
 UTKASTTYP_LEVERANTORSFAKTURA = "leverantorsfakturautkast"
 UTKASTTYP_ATTEST = "attest"
 UTKASTTYP_LEVERANTORSBETALNING = "leverantorsbetalning"
+UTKASTTYP_BETALNINGSVERIFIKAT = "betalningsverifikat"
 
 # ApprovalApi.DocumentApprovalStatus.
 ATTEST_GODKANN = 1
@@ -3324,3 +3329,25 @@ def _adapter_hamta_underlag_fil(klient, underlag_id: str) -> dict[str, Any]:
         "storlek_byte": len(content),
         "filtyp": meta.get("ContentType")
     }
+
+
+def _bygg_betalningsverifikat_payload(nyttolast: dict) -> dict:
+    return {
+        "VoucherDate": nyttolast["transaktionsdatum"],
+        "VoucherText": nyttolast["beskrivning"],
+        "Rows": [
+            {
+                "AccountNumber": int(rad["konto"]),
+                "DebitAmount": Decimal(str(rad.get("debet") or 0)),
+                "CreditAmount": Decimal(str(rad.get("kredit") or 0)),
+                "TransactionText": rad.get("text") or "",
+            }
+            for rad in nyttolast["rader"]
+        ],
+    }
+
+def skapa_betalningsverifikat(klient: _Spirisklient, payload: dict) -> dict:
+    return klient.skicka("/voucherwithoverunderpayment", payload)
+
+def hamta_kvittningskandidater(klient: _Spirisklient, faktura_id: str) -> list[dict]:
+    return klient.hamta_alla(f"/supplierinvoices/{faktura_id}/offsetcandidates")

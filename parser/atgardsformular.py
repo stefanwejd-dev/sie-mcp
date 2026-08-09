@@ -507,7 +507,47 @@ PERIODISERING = Atgardsformular(
     ]
 )
 
+
+def _betalningsverifikat_nyttolast(v: dict) -> dict:
+    try:
+        rader = json.loads(v.get("rader", "[]"))
+    except json.JSONDecodeError:
+        raise ValueError("Rader måste vara giltig JSON.")
+        
+    if not isinstance(rader, list):
+        raise ValueError("Rader måste vara en JSON-lista.")
+        
+    debet = kredit = 0.0
+    for rad in rader:
+        if not isinstance(rad, dict):
+            continue
+        debet += float(rad.get("debet") or 0)
+        kredit += float(rad.get("kredit") or 0)
+        
+    if abs(debet - kredit) > 0.005 or not rader:
+        raise ValueError(f"Verifikatet balanserar inte. Debet: {debet:.2f}, Kredit: {kredit:.2f}")
+
+    return {
+        "beskrivning": v.get("beskrivning", ""),
+        "transaktionsdatum": v.get("datum", ""),
+        "rader": rader,
+    }
+
+BETALNINGSVERIFIKAT = Atgardsformular(
+    utkasttyp="betalningsverifikat",
+    rubrik="Nytt betalningsverifikat",
+    ikon="💸",
+    falt=(
+        Falt("beskrivning", "Beskrivning", "text"),
+        Falt("datum", "Datum", "datum"),
+        Falt("rader", "Rader (konto/debet/kredit/text)", "text", hjalptext="JSON-lista med rader"),
+    ),
+    bygg_nyttolast=_betalningsverifikat_nyttolast,
+    bygg_sammanfattning=_verifikat_sammanfattning
+)
+
 ALLA_FORMULAR = [
+    BETALNINGSVERIFIKAT,
     VERIFIKAT, SIE4IMPORT, 
     FAKTURAUTSKICK, BETALNINGSPAMINNELSE, BETALNINGSREGISTRERING, MAKULERING, EFAKTURAUTSKICK, SALJDOKUMENTUTSKICK, SALJDOKUMENTATGARD,
     LEVERANTORSFAKTURAUTKAST, LEVERANTORSBETALNING, ATTEST,
