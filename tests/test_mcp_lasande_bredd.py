@@ -75,6 +75,8 @@ from mcp_server.server import (
     spiris_sok_verifikationer,
     spiris_verifikatutkast,
     spiris_sie4export,
+    spiris_underlag,
+    spiris_hamta_underlag,
 )
 
 _COMPANY = {"Name": "Testbolag AB", "CorporateIdentityNumber": "556677-8899",
@@ -167,6 +169,8 @@ class _FejkKlient:
     def hamta_en(self, path, params=None):
         if path == "/companysettings":
             return _COMPANY
+        if path.startswith("/attachments/"):
+            return {"Id": "123", "FileName": "test.pdf", "FileContext": "context"}
         if path.startswith("/customers/"):
             return {"CustomerName": "Anna Andersson", "Email": "anna@example.com"}
         raise AssertionError(f"oväntad hamta_en: {path}")
@@ -206,6 +210,8 @@ class _FejkKlient:
             return _VATCODES
         if path == "/vatreports":
             return _VATREPORTS
+        if path.startswith("/attachments"):
+            return [{"Id": "123", "FileName": "test.pdf"}]
         if path == "/customers":
             return _CUSTOMERS
         if path == "/customerinvoices":
@@ -273,6 +279,8 @@ ALLA_SPIRISVERKTYG = {
     "spiris_anlaggningstillgangar": lambda: spiris_anlaggningstillgangar(),
     "spiris_kundreskontraposter": lambda: spiris_kundreskontraposter(),
     "spiris_anvandare": lambda: spiris_anvandare(),
+    "spiris_underlag": lambda: spiris_underlag(),
+    "spiris_hamta_underlag": lambda: spiris_hamta_underlag("123"),
 }
 
 

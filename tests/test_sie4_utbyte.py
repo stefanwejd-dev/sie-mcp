@@ -236,6 +236,9 @@ class TestImportvagen:
             def skicka(self, path, data):
                 self.skickat.append((path, data))
                 return {}
+            def skicka_fil(self, path, query, payload, filename):
+                self.skickat.append((path, query, filename))
+                return {}
 
         klient = _Fangare()
         with pytest.raises(SpirisKlientFel) as fel:
@@ -258,6 +261,9 @@ class TestImportvagen:
 
             def skicka(self, path, data):
                 self.skickat.append((path, data))
+                return {}
+            def skicka_fil(self, path, query, payload, filename):
+                self.skickat.append((path, query, filename))
                 return {}
 
         klient = _Fangare()

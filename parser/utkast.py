@@ -89,6 +89,7 @@ GILTIGA_TYPER = (
     "masterdataandring",
     "masterdataborttagning",
     "sie4import",
+    "underlagskoppling",
     # Steg 4: utkastvägen.
     "utkastandring",
     "utkastborttagning",

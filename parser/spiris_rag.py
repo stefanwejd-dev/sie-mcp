@@ -803,3 +803,43 @@ def hamta_periodiseringar(klient: _Spirisklient) -> list[dict]:
         if "beskrivning" in p and p["beskrivning"]:
             p["beskrivning"] = maskera_chattmeddelande(p["beskrivning"]).text
     return rader
+
+
+async def hamta_underlag(klient, include_matched: bool) -> dict:
+    from parser.spiris_adapter import _adapter_underlag
+    from parser.sekretesslager import skapa_kontonamnsmaskerare
+    
+    rå_data = await asyncio.to_thread(_adapter_underlag, klient, include_matched)
+    
+    maskera = skapa_kontonamnsmaskerare(las_namnreferens())
+    
+    tvattad = []
+    for r in rå_data:
+        tvattad.append({
+            "id": r.get("Id"),
+            "filnamn": maskera(r.get("FileName", "")),
+            "filtyp": r.get("ContentType"),
+            "status": r.get("AttachmentStatus"),
+            "typ": r.get("Type"),
+            "kopplad_dokumenttyp": r.get("AttachedDocumentType"),
+            "dokument_id": r.get("DocumentId"),
+            "bilddatum": r.get("ImageDate"),
+            "transaktionsdatum": r.get("TransactionDate"),
+            "forfallodatum": r.get("DueDate"),
+            "fakturanummer": r.get("InvoiceNumber"),
+            "belopp": r.get("AmountInvoiceCurrency"),
+            "moms": r.get("Vat"),
+            "valuta": r.get("CurrencyCode"),
+            "leverantorsnamn": maskera(r.get("SupplierName") or "")
+        })
+        
+    return _envelope(tvattad, antal_exkluderade=0)
+
+
+
+async def hamta_underlag_fil(klient, underlag_id: str) -> dict:
+    from parser.spiris_adapter import _adapter_hamta_underlag_fil
+    import asyncio
+    data = await asyncio.to_thread(_adapter_hamta_underlag_fil, klient, underlag_id)
+    from parser.spiris_rag import _envelope
+    return _envelope(data, antal_exkluderade=0)

@@ -321,6 +321,8 @@ KATEGORI_RESKONTRA = "reskontrauppgifter (GDPR-tvättade)"
 KATEGORI_STRUKTUR = "strukturdata (kontoplan, räkenskapsår, företagsuppgifter)"
 KATEGORI_MOTPARTSREGISTER = "motpartsregister (GDPR-tvättat)"
 KATEGORI_UTKAST = "utkastförslag (ej utfört)"
+KATEGORI_UNDERLAG = "underlag och bilagor (filnamn och metadata)"
+
 KATEGORI_SYSTEM = "systemuppgifter (rådata för djupfelsökning)"
 
 
@@ -2035,6 +2037,40 @@ async def forbered_periodisering(
     return await _kor_utkastverktyg(
         _bygg, ctx, f"Förslag: periodisera {belopp} kr", sammanfattning
     )
+
+
+@mcp.tool()
+async def spiris_underlag(include_matched: bool = False) -> str:
+    """Listar underlag/bilagor i Spiris (t.ex. inscannade kvitton). Returnerar envelope.
+    Filnamnet, som ofta innehåller fritext, och leverantörsnamnet maskeras via namnregistret.
+    include_matched=False ger endast o-kopplade (obokförda) underlag."""
+    return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_underlag(k, include_matched), KATEGORI_UNDERLAG)
+
+@mcp.tool()
+async def spiris_hamta_underlag(underlag_id: str) -> str:
+    """Laddar ner ett underlag från Spiris (max 25 MB) och sparar det lokalt.
+    Returnerar sökvägen till den sparade filen samt metadata, INTE filens innehåll.
+    Detta verktyg maskerar inte innehållet inuti PDF/bilden."""
+    return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_underlag_fil(k, underlag_id), KATEGORI_UNDERLAG)
+
+@mcp.tool()
+async def forbered_underlagskoppling(underlag_id: str, dokument_id: str, dokument_typ: str = "SupplierInvoice") -> str:
+    """Skapar ett utkast för att koppla ett befintligt underlag till ett befintligt dokument.
+    dokument_typ är oftast 'SupplierInvoice' (Leverantörsfaktura) eller 'Voucher' (Verifikat)."""
+    import parser.utkast as utkast
+    from parser.spiris_adapter import UTKASTTYP_UNDERLAGSKOPPLING
+    payload = {
+        "DocumentId": dokument_id,
+        "AttachmentIds": [underlag_id],
+        "DocumentType": dokument_typ
+    }
+    u = utkast.skapa(
+        UTKASTTYP_UNDERLAGSKOPPLING,
+        payload,
+        f"Koppla bilaga till {dokument_id} ({dokument_typ})"
+    )
+    import json
+    return json.dumps({"utkast_id": u.utkast_id, "info": f"Utkast {u.utkast_id} skapat."})
 
 if __name__ == "__main__":
     mcp.run()

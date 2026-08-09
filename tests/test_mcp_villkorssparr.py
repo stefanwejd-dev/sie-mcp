@@ -62,6 +62,8 @@ from mcp_server.server import (
     spiris_anlaggningstillgangar,
     spiris_kundreskontraposter,
     spiris_anvandare,
+    spiris_underlag,
+    spiris_hamta_underlag,
 )
 
 FILVERKTYG = [berakna_vasentlighet, granska_kontotyper]
@@ -112,6 +114,8 @@ SPIRIS_ARGUMENT: dict[str, tuple] = {
     "spiris_anlaggningstillgangar": (),
     "spiris_kundreskontraposter": (),
     "spiris_anvandare": (),
+    "spiris_underlag": (),
+    "spiris_hamta_underlag": ("123",),
     "spiris_periodiseringar": (),
 }
 
@@ -158,6 +162,8 @@ _SPIRISFUNKTIONER = {
     "spiris_anlaggningstillgangar": spiris_anlaggningstillgangar,
     "spiris_kundreskontraposter": spiris_kundreskontraposter,
     "spiris_anvandare": spiris_anvandare,
+    "spiris_underlag": spiris_underlag,
+    "spiris_hamta_underlag": spiris_hamta_underlag,
 }
 
 SPIRISVERKTYG = [
@@ -309,7 +315,7 @@ def test_alla_registrerade_verktyg_har_ett_sparrtest():
            "forbered_leverantorsbetalning"}
         | {"forbered_masterdataandring", "forbered_masterdataborttagning"}
         | {"forbered_utkastandring", "forbered_utkastborttagning", "forbered_utkastbokforing"}
-        | {"forbered_periodisering"}
+        | {"forbered_periodisering", "forbered_underlagskoppling"}
         | {"forbered_sie4import"}
         | {"visa_anvandarvillkor"}
         | alias_verktyg

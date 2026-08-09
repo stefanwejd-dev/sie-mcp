@@ -1,6 +1,6 @@
 # Exekverbar plan — full Spiris-täckning
 
-> **STATUS:** Etapp 0-3 är genomförda och testerna är godkända (2192 passed). Arbetet är pausat vid GRIND 3 i väntan på godkännande för Etapp 4.
+> **STATUS:** Etapp 0-4 är genomförda och testerna är godkända. Arbetet är pausat vid GRIND 4 i väntan på godkännande för Etapp 5.
 
 **Läs `ARKITEKTUR_SPIRIS_TACKNING.md` först.** Den motiverar varje beslut
 nedan. Det här dokumentet innehåller bara utförandet.
@@ -622,7 +622,7 @@ den inte entydigt.
 **Bygg den här uppgiften först efter besked från arkitekten.** Står du här
 utan besked: stanna och fråga (konstitutionen §6).
 
-**GRIND 4.** Rapportera och stanna.
+**GRIND 4.** Rapportera och stanna. (KLART)
 
 ---
 

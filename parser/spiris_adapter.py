@@ -624,6 +624,29 @@ def utfor_utkast(
             arsavslut=bool(nyttolast.get("arsavslut", False)),
         )
         return importera_sie4(klient, payload)
+        
+    if typ == UTKASTTYP_UNDERLAGSKOPPLING:
+        return klient.skicka("/attachmentlinks", nyttolast)
+        # Filen läses HÄR, vid utförandet — utkastet bär bara sökvägen och de
+        # granskade flaggorna. Innehållet har aldrig passerat en AI, och
+        # nyttolastens hash binder användarens beslut (vilken fil, vilka
+        # flaggor), inte filens bytes.
+        sokvag = Path(nyttolast["sokvag"])
+        try:
+            innehall = sokvag.read_bytes()
+        except OSError as e:
+            raise SpirisKlientFel(
+                f"Kunde inte läsa SIE4-filen {sokvag.name!r}. "
+                "Ingenting har importerats."
+            ) from e
+        payload = bygg_sie4import_payload(
+            innehall,
+            importera_ingaende_balans=bool(nyttolast.get("ingaende_balans", False)),
+            importera_kontonamn=bool(nyttolast.get("kontonamn", False)),
+            mappa_konton=bool(nyttolast.get("mappa_konton", False)),
+            arsavslut=bool(nyttolast.get("arsavslut", False)),
+        )
+        return importera_sie4(klient, payload)
 
     if typ == UTKASTTYP_MASTERDATAANDRING:
         return andra_masterdata(
@@ -2884,6 +2907,21 @@ def ta_bort_masterdata(
 
 UTKASTTYP_SIE4IMPORT = "sie4import"
 
+UTKASTTYP_UNDERLAGSKOPPLING = "underlagskoppling"
+
+def bygg_utkast_underlagskoppling(underlag_id: str, dokument_id: str, dokument_typ: str) -> dict:
+    return {
+        "titel": "Koppla underlag",
+        "beskrivning": f"Koppla bilaga {underlag_id} till dokument {dokument_id} ({dokument_typ}).",
+        "typ": UTKASTTYP_UNDERLAGSKOPPLING,
+        "payload": {
+            "DocumentId": dokument_id,
+            "AttachmentIds": [underlag_id],
+            "DocumentType": dokument_typ
+        }
+    }
+
+
 # Sie4Api.Encoding. 1 = Codepage 437, 2 = Codepage 850, 3 = Codepage 1252(?).
 # SIE-standarden föreskriver CP437; det är därför standardvärdet här.
 SIE4_ENCODING_STANDARD = 1
@@ -3252,3 +3290,37 @@ def hamta_anvandare(klient: _Spirisklient) -> list[dict]:
             "far_attestera_momsrapporter": bool(rå.get("HasVATReportsApprovalPermission", False)),
         })
     return rader
+
+
+def _adapter_underlag(klient, include_matched: bool) -> list[dict]:
+    return klient.hamta_alla("/attachments", params={"includeMatched": str(include_matched).lower()})
+
+def _adapter_hamta_underlag_fil(klient, underlag_id: str) -> dict[str, Any]:
+    # U4.3 spec
+    url = f"https://eaccountingapi.vismaonline.com/v2/attachments/{underlag_id}"
+    from pathlib import Path
+    import os
+    
+    # We must use U0.3's hamta_binart
+    meta, content = klient.hamta_binart(url)
+    
+    if len(content) > 25 * 1024 * 1024:
+        from parser.spiris_klient import SpirisKlientFel
+        raise SpirisKlientFel("Underlaget är större än 25 MB och kan inte laddas ner.")
+        
+    filnamn = meta.get("FileName") or f"{underlag_id}.pdf"
+    
+    import platform
+    home = Path.home()
+    dl_dir = home / "Downloads"
+    dl_dir.mkdir(parents=True, exist_ok=True)
+    
+    sokvag = dl_dir / filnamn
+    sokvag.write_bytes(content)
+    
+    return {
+        "sokvag": str(sokvag),
+        "filnamn": filnamn,
+        "storlek_byte": len(content),
+        "filtyp": meta.get("ContentType")
+    }

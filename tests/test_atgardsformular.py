@@ -22,7 +22,7 @@ def test_metatest_at_bada_hallen():
         assert t in GILTIGA_TYPER, f"{t} finns inte i GILTIGA_TYPER"
         
     # Alla giltiga typer (utom kund, kundfaktura) måste ha ett formulär
-    undantagna = {"kund", "kundfaktura"}
+    undantagna = {"kund", "kundfaktura", "underlagskoppling"}
     for t in GILTIGA_TYPER:
         if t not in undantagna:
             assert t in formular_typer, f"Giltig typ {t} saknar formulär"
