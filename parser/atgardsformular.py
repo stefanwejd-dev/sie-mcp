@@ -442,9 +442,76 @@ MASTERDATABORTTAGNING = Atgardsformular(
     varning="Borttagningen kan inte ångras."
 )
 
+UTKASTANDRING = Atgardsformular(
+    utkasttyp="utkastandring",
+    rubrik="Ändra utkast",
+    ikon="✏️",
+    falt=(
+        Falt("utkasttyp", "Utkasttyp", "text"),
+        Falt("utkast_id", "Utkast-ID", "text"),
+    ),
+    bygg_nyttolast=lambda v: {"utkasttyp": v.get("utkasttyp", ""), "utkast_id": v.get("utkast_id", "")},
+    bygg_sammanfattning=lambda v: [["Utkasttyp", str(v.get("utkasttyp", ""))]]
+)
+
+UTKASTBORTTAGNING = Atgardsformular(
+    utkasttyp="utkastborttagning",
+    rubrik="Ta bort utkast",
+    ikon="🗑️",
+    falt=(
+        Falt("utkasttyp", "Utkasttyp", "text"),
+        Falt("utkast_id", "Utkast-ID", "text"),
+    ),
+    bygg_nyttolast=lambda v: {"utkasttyp": v.get("utkasttyp", ""), "utkast_id": v.get("utkast_id", "")},
+    bygg_sammanfattning=lambda v: [["Utkasttyp", str(v.get("utkasttyp", ""))]],
+    varning="Borttagningen kan inte ångras."
+)
+
+UTKASTBOKFORING = Atgardsformular(
+    utkasttyp="utkastbokforing",
+    rubrik="Bokför utkast",
+    ikon="📗",
+    falt=(
+        Falt("utkasttyp", "Utkasttyp", "text"),
+        Falt("utkast_id", "Utkast-ID", "text"),
+    ),
+    bygg_nyttolast=lambda v: {"utkasttyp": v.get("utkasttyp", ""), "utkast_id": v.get("utkast_id", "")},
+    bygg_sammanfattning=lambda v: [["Utkasttyp", str(v.get("utkasttyp", ""))]],
+    varning="Bokföringen är oåterkallelig."
+)
+
+PERIODISERING = Atgardsformular(
+    utkasttyp="periodisering",
+    rubrik="Skapa periodisering",
+    ikon="⏳",
+    falt=(
+        Falt("startdatum", "Startdatum", "text"),
+        Falt("belopp", "Belopp", "decimal"),
+        Falt("konto", "Periodiseringskonto", "heltal"),
+        Falt("antal_perioder", "Antal perioder", "heltal"),
+        Falt("kopplingspar", "Koppling", "text"),
+    ),
+    bygg_nyttolast=lambda v: {
+        "startdatum": v.get("startdatum", ""),
+        "belopp": v.get("belopp", ""),
+        "konto": v.get("konto", ""),
+        "antal_perioder": v.get("antal_perioder", ""),
+        "kopplingspar": v.get("kopplingspar", ""),
+    },
+    bygg_sammanfattning=lambda v: [
+        ["Startdatum", str(v.get("startdatum", ""))],
+        ["Belopp", str(v.get("belopp", ""))],
+        ["Konto", str(v.get("konto", ""))],
+        ["Perioder", str(v.get("antal_perioder", ""))],
+        ["Koppling", str(v.get("kopplingspar", ""))],
+    ]
+)
+
 ALLA_FORMULAR = [
     VERIFIKAT, SIE4IMPORT, 
     FAKTURAUTSKICK, BETALNINGSPAMINNELSE, BETALNINGSREGISTRERING, MAKULERING, EFAKTURAUTSKICK, SALJDOKUMENTUTSKICK, SALJDOKUMENTATGARD,
     LEVERANTORSFAKTURAUTKAST, LEVERANTORSBETALNING, ATTEST,
-    MASTERDATAANDRING, MASTERDATABORTTAGNING
+    MASTERDATAANDRING, MASTERDATABORTTAGNING,
+    UTKASTANDRING, UTKASTBORTTAGNING, UTKASTBOKFORING,
+    PERIODISERING
 ]

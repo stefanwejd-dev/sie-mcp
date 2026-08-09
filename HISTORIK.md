@@ -152,3 +152,4 @@ utvecklaren.
 | 2026-08-06 | Uppdaterar arkitektur- och statusdokument med buggrättningar från 2026-08-06 |
 | 2026-08-06 | feat(ui): flernivå-drilldown (motpart/fakturor) i Register och Balansräkningen, samt Spiris-buggrättningar |
 | 2026-08-06 | docs: uppdatera statusruta med senast commit hash |
+| 2026-08-09 | feat: Genomför Etapp 0-3 i Spiris-täckningsplanen (transport, läsning, utkast, periodisering) samt tester |

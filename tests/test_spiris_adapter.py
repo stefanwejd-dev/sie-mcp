@@ -419,7 +419,7 @@ class TestHamtaReskontra:
     och kör genom tvättmaskinen -> färdigtvättade Leverantorspost."""
 
     class _FejkKlient:
-        def hamta_alla(self, path, params=None):
+        def hamta_alla(self, path, params=None, **kwargs):
             if path == "/suppliers":
                 return SUPPLIERS
             if path == "/supplierinvoices":
@@ -503,7 +503,7 @@ class TestByggKundreskontraRader:
 
 class TestHamtaKundreskontra:
     class _FejkKlient:
-        def hamta_alla(self, path, params=None):
+        def hamta_alla(self, path, params=None, **kwargs):
             if path == "/customers":
                 return CUSTOMERS
             if path == "/customerinvoices":
@@ -609,7 +609,7 @@ class TestByggKundbetalhistorikRader:
 
 class TestHamtaKundbetalhistorik:
     class _FejkKlient:
-        def hamta_alla(self, path, params=None):
+        def hamta_alla(self, path, params=None, **kwargs):
             if path == "/customerinvoices":
                 return BETALHISTORIK_FAKTUROR
             raise AssertionError(f"oväntad path: {path}")
@@ -753,7 +753,7 @@ class TestHittaArtikelForKonto:
             self._kodningar = kodningar
             self._artiklar = artiklar
 
-        def hamta_alla(self, path, params=None):
+        def hamta_alla(self, path, params=None, **kwargs):
             if path == "/articleaccountcodings":
                 return self._kodningar
             if path == "/articles":
@@ -797,7 +797,7 @@ class TestLosaArtikelIderForFakturarader:
         def __init__(self):
             self.uppslag = 0
 
-        def hamta_alla(self, path, params=None):
+        def hamta_alla(self, path, params=None, **kwargs):
             self.uppslag += 1
             if path == "/articleaccountcodings":
                 return [
@@ -971,7 +971,7 @@ class TestSekretessluckorReskontraPaketB:
             self._lev = lev or []
             self._levfakturor = levfakturor or []
 
-        def hamta_alla(self, path, params=None):
+        def hamta_alla(self, path, params=None, **kwargs):
             if path == "/customers":
                 return self._kunder
             if path == "/customerinvoices":
@@ -1029,7 +1029,7 @@ class TestHamtaKunder:
     class _FejkKlient:
         def __init__(self, kunder_svar):
             self.kunder_svar = kunder_svar
-        def hamta_alla(self, path):
+        def hamta_alla(self, path, **kwargs):
             if path == "/customers":
                 return self.kunder_svar
             raise AssertionError(f"oväntad path: {path}")
@@ -1091,7 +1091,7 @@ class TestHamtaLeverantorer:
     class _FejkKlient:
         def __init__(self, lev_svar):
             self.lev_svar = lev_svar
-        def hamta_alla(self, path):
+        def hamta_alla(self, path, **kwargs):
             if path == "/suppliers":
                 return self.lev_svar
             raise AssertionError(f"oväntad path: {path}")
@@ -1143,7 +1143,7 @@ class TestHamtaProjekt:
     class _FejkKlient:
         def __init__(self, proj_svar):
             self.proj_svar = proj_svar
-        def hamta_alla(self, path):
+        def hamta_alla(self, path, **kwargs):
             if path == "/projects":
                 return self.proj_svar
             raise AssertionError(f"oväntad path: {path}")
@@ -1172,7 +1172,7 @@ class TestHamtaKostnadsstallen:
     class _FejkKlient:
         def __init__(self, ks_svar):
             self.ks_svar = ks_svar
-        def hamta_alla(self, path):
+        def hamta_alla(self, path, **kwargs):
             if path == "/costcenters":
                 return self.ks_svar
             raise AssertionError(f"oväntad path: {path}")
@@ -1210,10 +1210,10 @@ class TestHamtaKontosaldo:
         def __init__(self, saldo_svar):
             self.saldo_svar = saldo_svar
             self.anropad_metod = None
-        def hamta_en(self, path):
+        def hamta_en(self, path, params=None, **kwargs):
             self.anropad_metod = "hamta_en"
             return self.saldo_svar
-        def hamta_alla(self, path):
+        def hamta_alla(self, path, **kwargs):
             self.anropad_metod = "hamta_alla"
             return [self.saldo_svar]
 
@@ -1241,7 +1241,7 @@ class TestHamtaReferensdata:
     class _FejkKlient:
         def __init__(self, ref_svar):
             self.ref_svar = ref_svar
-        def hamta_alla(self, path):
+        def hamta_alla(self, path, **kwargs):
             return self.ref_svar
 
     def test_okand_typ_hojer_valueerror_med_giltiga_alternativ(self):
@@ -1307,7 +1307,7 @@ class TestNycklarMotSpirio:
     class _FejkKlient:
         def __init__(self, data):
             self.data = data
-        def hamta_alla(self, path, params=None):
+        def hamta_alla(self, path, params=None, **kwargs):
             return self.data
     
     def test_kunder_nycklar_frysta(self):
@@ -1380,7 +1380,7 @@ class TestHamtaBankkonton:
     class _FejkKlient:
         def __init__(self, data):
             self.data = data
-        def hamta_alla(self, path, params=None):
+        def hamta_alla(self, path, params=None, **kwargs):
             return self.data
 
     def test_bankkonto_bar_id(self):
@@ -1416,7 +1416,7 @@ class TestHamtaBankhandelser:
             self.data = data
             self.anropad_path = None
             self.anropade_params = None
-        def hamta_alla(self, path, params=None):
+        def hamta_alla(self, path, params=None, **kwargs):
             self.anropad_path = path
             self.anropade_params = params
             return self.data
@@ -1472,7 +1472,7 @@ class TestHamtaAvstamningslage:
         def __init__(self, konton, handelser):
             self.konton = konton
             self.handelser = handelser
-        def hamta_alla(self, path, params=None):
+        def hamta_alla(self, path, params=None, **kwargs):
             if "bankaccounts" in path:
                 return self.konton
             return self.handelser
@@ -1564,7 +1564,7 @@ class TestUtkastvagen:
             def __init__(self):
                 self.skickat = []
 
-            def hamta_alla(self, path, params=None):
+            def hamta_alla(self, path, params=None, **kwargs):
                 if path == "/customers":
                     return [{"Id": "cus-1", "Name": "Kundbolaget AB"}]
                 if path == "/articleaccountcodings":
@@ -1612,3 +1612,81 @@ class TestUtkastvagen:
 
         assert verifikation.vernr == "utk-1"
         assert verifikation.serie == "A"
+
+
+class TestEtapp1ODataParametrar:
+    class _FangarKlient:
+        def __init__(self):
+            self.anrop = []
+
+        def hamta_alla(self, path, params=None, filter=None, select=None, orderby=None, pagesize=None):
+            self.anrop.append((path, filter, select, orderby, pagesize))
+            return []
+
+        def hamta_en(self, path, params=None, **kwargs):
+            self.anrop.append((path, params))
+            return {}
+
+        def skicka(self, path, data):
+            pass
+
+    def test_kunder_skickar_odata(self):
+        from spiris_adapter import hamta_kunder
+        klient = self._FangarKlient()
+        hamta_kunder(klient, filter="Namn", select=["Id"], orderby="Namn", pagesize=10)
+        assert klient.anrop[0] == ("/customers", "Namn", ["Id"], "Namn", 10)
+
+    def test_leverantorer_skickar_odata(self):
+        from spiris_adapter import hamta_leverantorer
+        klient = self._FangarKlient()
+        hamta_leverantorer(klient, filter="Namn", select=["Id"], orderby="Namn", pagesize=10)
+        assert klient.anrop[0] == ("/suppliers", "Namn", ["Id"], "Namn", 10)
+
+    def test_projekt_skickar_odata(self):
+        from spiris_adapter import hamta_projekt
+        klient = self._FangarKlient()
+        hamta_projekt(klient, filter="Namn", select=["Id"], orderby="Namn", pagesize=10)
+        assert klient.anrop[0] == ("/projects", "Namn", ["Id"], "Namn", 10)
+
+    def test_kostnadsstallen_skickar_odata(self):
+        from spiris_adapter import hamta_kostnadsstallen
+        klient = self._FangarKlient()
+        hamta_kostnadsstallen(klient, filter="Namn", select=["Id"], orderby="Namn", pagesize=10)
+        assert klient.anrop[0] == ("/costcenters", "Namn", ["Id"], "Namn", 10)
+
+    def test_kontosaldo_skickar_odata_som_params(self):
+        from spiris_adapter import hamta_kontosaldo
+        klient = self._FangarKlient()
+        hamta_kontosaldo(klient, "1930", "2026-12-31", filter="Namn", select=["Id"], orderby="Namn", pagesize=10)
+        path, params = klient.anrop[0]
+        assert path == "/accountbalances/1930/2026-12-31"
+        assert params["$filter"] == "Namn"
+        assert params["$select"] == "Id"
+        assert params["$orderby"] == "Namn"
+        assert params["$pagesize"] == "10"
+
+    def test_referensdata_skickar_odata(self):
+        from spiris_adapter import hamta_referensdata
+        klient = self._FangarKlient()
+        hamta_referensdata(klient, "valutor", filter="Namn", select=["Id"], orderby="Namn", pagesize=10)
+        assert klient.anrop[0] == ("/currencies", "Namn", ["Id"], "Namn", 10)
+
+class TestU15_Enkeluppslag:
+    class _FejkKlient:
+        def hamta_en(self, path, **kwargs):
+            return {"Id": "123", "Name": "Test"}
+        def hamta_alla(self, path, **kwargs):
+            return [{"Id": "123", "Name": "Test"}]
+
+    def test_hamta_ett_kunder(self):
+        from spiris_adapter import hamta_ett
+        res = hamta_ett(self._FejkKlient(), "kund", "123")
+        assert "namn" in res
+
+    def test_hamta_ett_verifikatutkast(self):
+        from spiris_adapter import hamta_ett
+        kl = self._FejkKlient()
+        def hamta_en_mock(p, **kw): return {"Id": "123", "VoucherDate": "2026-08-01", "NumberAndNumberSeries": "A1"}
+        kl.hamta_en = hamta_en_mock
+        res = hamta_ett(kl, "verifikatutkast", "123")
+        assert "verifikat" in res

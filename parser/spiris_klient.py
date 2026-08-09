@@ -26,6 +26,7 @@ inte klienten själv. ta_bort() är den enda oåterkalleliga."""
 from __future__ import annotations
 
 import json
+import time
 from decimal import Decimal
 from typing import Any
 
@@ -34,6 +35,10 @@ import httpx
 TOKEN_URL = "https://identity.vismaonline.com/connect/token"
 API_BAS = "https://eaccountingapi.vismaonline.com/v2"
 _TIMEOUT_SEKUNDER = 30.0
+
+
+def _sov(sekunder: int) -> None:
+    time.sleep(sekunder)
 
 
 class SpirisKlientFel(Exception):
@@ -74,14 +79,44 @@ class SpirisKlient:
 
     # -- publikt ---------------------------------------------------------------
 
-    def hamta_alla(self, path: str, params: dict | None = None) -> list[dict]:
+    def hamta_alla(
+        self,
+        path: str,
+        params: dict | None = None,
+        *,
+        filter: str | None = None,
+        select: list[str] | None = None,
+        orderby: str | None = None,
+        pagesize: int | None = None,
+    ) -> list[dict]:
         """Hämtar alla sidor för en paginerad endpoint och konkatenerar
         Data. Följer Meta.CurrentPage/TotalNumberOfPages tills sista sidan.
         Fail-closed vid varje fel."""
+        anrops_params = dict(params) if params else {}
+
+        _nya = {}
+        if filter is not None:
+            if not filter.strip():
+                raise ValueError("filter får inte vara tomt.")
+            _nya["$filter"] = filter
+        if select is not None:
+            _nya["$select"] = ",".join(select)
+        if orderby is not None:
+            _nya["$orderby"] = orderby
+        if pagesize is not None:
+            if not (1 <= pagesize <= 1000):
+                raise ValueError("pagesize måste vara mellan 1 och 1000.")
+            _nya["$pagesize"] = pagesize
+
+        for k, v in _nya.items():
+            if k in anrops_params:
+                raise ValueError(f"Parametern {k} krockar med befintligt värde i params.")
+            anrops_params[k] = v
+
         rader: list[dict] = []
         sida = 1
         while True:
-            sidparametrar = {**(params or {}), "$page": sida}
+            sidparametrar = {**anrops_params, "$page": sida}
             svar = self._hamta_json(f"{API_BAS}{path}", sidparametrar)
             rader.extend(svar.get("Data", []))
             meta = svar.get("Meta") or {}
@@ -95,6 +130,11 @@ class SpirisKlient:
         /companysettings — samma parse_float=Decimal, refresh och fail-closed
         som hamta_alla, men returnerar objektet rakt av (ingen Data/Meta)."""
         return self._hamta_json(f"{API_BAS}{path}", params or {})
+
+    def hamta_binart(self, path: str) -> tuple[bytes, str]:
+        """Returnerar (innehåll, content_type)."""
+        svar = self._anrop_med_refresh("GET", f"{API_BAS}{path}")
+        return svar.content, svar.headers.get("Content-Type", "application/octet-stream")
 
     def skicka(self, path: str, data: dict) -> dict:
         """POSTar data (t.ex. en ny kund eller kundfaktura) och returnerar
@@ -179,6 +219,26 @@ class SpirisKlient:
         if svar.status_code == 401:
             self._refresh()
             svar = self._anrop(metod, url, params=params, kropp=kropp)
+            
+        if svar.status_code == 429:
+            retry_after = svar.headers.get("Retry-After")
+            if retry_after and retry_after.isdigit():
+                vanta_sek = int(retry_after)
+                if vanta_sek <= 60:
+                    _sov(vanta_sek)
+                    svar = self._anrop(metod, url, params=params, kropp=kropp)
+                    
+            if svar.status_code == 429:
+                fel_msg = "Spiris avvisade förfrågan (HTTP 429)."
+                try:
+                    data = json.loads(svar.text)
+                    dev_msg = data.get("DeveloperErrorMessage")
+                    if dev_msg:
+                        fel_msg = f"Spiris avvisade förfrågan (HTTP 429): {dev_msg}"
+                except (json.JSONDecodeError, ValueError):
+                    pass
+                raise SpirisKlientFel(fel_msg)
+
         try:
             svar.raise_for_status()
         except httpx.HTTPStatusError as e:

@@ -57,9 +57,13 @@ from spiris_adapter import hamta_order as _adapter_order
 from spiris_adapter import hamta_foretagsinfo as _adapter_foretagsinfo
 from spiris_adapter import hamta_kontoplan as _adapter_kontoplan
 from spiris_adapter import hamta_kundbetalhistorik as _adapter_kundbetalhistorik
+from spiris_adapter import hamta_kundfakturor as _adapter_kundfakturor
 from spiris_adapter import hamta_kundreskontra as _adapter_kundreskontra
 from spiris_adapter import hamta_rakenskapsar as _adapter_rakenskapsar
 from spiris_adapter import hamta_reskontra as _adapter_reskontra
+from spiris_adapter import hamta_verifikationer_alla as _adapter_verifikationer_alla
+from spiris_adapter import hamta_ingaende_balans as _adapter_ingaende_balans
+
 
 from spiris_adapter import hamta_kunder as _adapter_kunder
 from spiris_adapter import hamta_leverantorer as _adapter_leverantorer
@@ -247,6 +251,71 @@ async def hamta_kontotransaktioner(
     return _envelope(data, antal_exkluderade=len(resultat.blockerade_verifikationer))
 
 
+async def hamta_verifikationer_alla(
+    klient: _Spirisklient, fran_datum: str | None = None, till_datum: str | None = None
+) -> dict[str, Any]:
+    """Alla verifikationer med maskerad fritext."""
+    råa_rader = await asyncio.to_thread(_adapter_verifikationer_alla, klient, fran_datum, till_datum)
+    
+    from domain_model import Transaktion, Verifikation
+    vers = []
+    for i, r in enumerate(råa_rader):
+        transaktioner = [
+            Transaktion(
+                kontonr=tr["kontonr"],
+                belopp=tr["belopp"],
+                transtext=tr.get("transtext"),
+            )
+            for tr in r["rader"]
+        ]
+        vers.append(Verifikation(
+            serie=r.get("serie"),
+            vernr=str(i),
+            verdatum=_date.fromisoformat(r["datum"]),
+            vertext=r.get("text"),
+            transaktioner=transaktioner,
+        ))
+    
+    sie = SIEFil(verifikationer=vers)
+    resultat = maskera_siefil(sie, referenslista=las_namnreferens())
+    
+    maskerade_dict = {
+        v.vernr: v
+        for v in resultat.sandningsbara_verifikationer
+    }
+    
+    data = []
+    for i, r in enumerate(råa_rader):
+        if str(i) in maskerade_dict:
+            maskerad_ver = maskerade_dict[str(i)]
+            ny_rad = dict(r)
+            ny_rad["text"] = maskerad_ver.vertext
+            nya_tr = []
+            for j, tr in enumerate(r["rader"]):
+                ny_tr = dict(tr)
+                ny_tr["transtext"] = maskerad_ver.transaktioner[j].transtext
+                nya_tr.append(ny_tr)
+            ny_rad["rader"] = nya_tr
+            data.append(ny_rad)
+            
+    return _envelope(data, len(resultat.blockerade_verifikationer))
+
+
+async def hamta_ingaende_balans(klient: _Spirisklient) -> dict[str, Any]:
+    """Ingående balanser. Ett kontonamn kan bära PII och maskeras."""
+    rader = await asyncio.to_thread(_adapter_ingaende_balans, klient)
+    maskera = skapa_kontonamnsmaskerare(las_namnreferens())
+    
+    data = []
+    for rad in rader:
+        ny_rad = dict(rad)
+        ny_rad["kontonamn"] = maskera(rad["kontonamn"])
+        data.append(ny_rad)
+        
+    return _envelope(data, 0)
+
+
+
 async def sok_verifikationstexter(
     klient: _Spirisklient, räkenskapsår_id: str, sökterm: str
 ) -> dict[str, Any]:
@@ -418,6 +487,15 @@ async def hamta_leverantorsfakturor(klient: _Spirisklient) -> dict[str, Any]:
     """Leverantörsfakturor med detalj. Motpartsnamn tvättade enligt samma regel
     som reskontran; betalningsidentifierare hämtas aldrig."""
     rader = await asyncio.to_thread(_adapter_levfakturor, klient)
+    return _envelope(rader, antal_exkluderade=0)
+
+
+async def hamta_kundfakturor(klient: _Spirisklient) -> dict[str, Any]:
+    """Kundfakturor med detalj. Till skillnad från kundreskontran ingår även betalda fakturor.
+    
+    Motpartsnamn tvättade enligt samma regel som reskontran; betalningsidentifierare hämtas aldrig.
+    """
+    rader = await asyncio.to_thread(_adapter_kundfakturor, klient)
     return _envelope(rader, antal_exkluderade=0)
 
 
@@ -655,3 +733,73 @@ async def hamta_likviditetsprognos(
             "kassasaldo_kalla": "angivet av anropare" if angivet_utifran else "balansrapport",
         }
     )
+
+from spiris_adapter import hamta_kontoplan_alla as _adapter_kontoplan_alla
+
+async def hamta_kontoplan_alla(klient: _Spirisklient) -> dict[str, Any]:
+    """Kontoplan för alla år."""
+    rader = await asyncio.to_thread(_adapter_kontoplan_alla, klient)
+    maskera = skapa_kontonamnsmaskerare(las_namnreferens())
+    
+    data = []
+    for rad in rader:
+        ny_rad = dict(rad)
+        ny_rad["kontonamn"] = maskera(rad["kontonamn"])
+        data.append(ny_rad)
+        
+    return _envelope(data, 0)
+from spiris_adapter import hamta_ett as _adapter_hamta_ett
+
+async def hamta_ett_rag(klient: _Spirisklient, endpoint: str, objekt_id: str) -> dict[str, Any]:
+    """Enkeluppslag med rekursiv maskering."""
+    rå_data = await asyncio.to_thread(_adapter_hamta_ett, klient, endpoint, objekt_id)
+    maskera = skapa_kontonamnsmaskerare(las_namnreferens())
+    
+    def _maskera_rekursivt(obj):
+        if isinstance(obj, dict):
+            return {k: _maskera_rekursivt(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [_maskera_rekursivt(v) for v in obj]
+        elif isinstance(obj, str):
+            return maskera(obj)
+        return obj
+        
+    maskerad_data = _maskera_rekursivt(rå_data)
+    return _envelope([maskerad_data], 0)
+
+async def hamta_ett(klient: _Spirisklient, typ: str, objekt_id: str) -> dict[str, Any]:
+    from spiris_adapter import hamta_ett as _adapter_hamta_ett
+    res = await asyncio.to_thread(_adapter_hamta_ett, klient, typ, objekt_id)
+    return _envelope(res if isinstance(res, list) else [res], antal_exkluderade=0)
+
+async def hamta_valutakurs(klient: _Spirisklient, datum: str, fran_valuta: str, till_valuta: str) -> dict[str, Any]:
+    from spiris_adapter import hamta_valutakurs as _adapter_valutakurs
+    res = await asyncio.to_thread(_adapter_valutakurs, klient, datum, fran_valuta, till_valuta)
+    return _envelope([res], antal_exkluderade=0)
+
+async def hamta_anlaggningstillgangar(klient: _Spirisklient) -> dict[str, Any]:
+    from spiris_adapter import hamta_anlaggningstillgangar as _adapter_anlaggningstillgangar
+    res = await asyncio.to_thread(_adapter_anlaggningstillgangar, klient)
+    return _envelope(res, antal_exkluderade=0)
+
+async def hamta_kundreskontraposter(klient: _Spirisklient) -> dict[str, Any]:
+    from spiris_adapter import hamta_kundreskontraposter as _adapter_kundreskontraposter
+    res = await asyncio.to_thread(_adapter_kundreskontraposter, klient)
+    return _envelope(res, antal_exkluderade=0)
+
+async def hamta_anvandare(klient: _Spirisklient) -> dict[str, Any]:
+    from spiris_adapter import hamta_anvandare as _adapter_anvandare
+    res = await asyncio.to_thread(_adapter_anvandare, klient)
+    return _envelope(res, antal_exkluderade=0)
+
+
+def hamta_periodiseringar(klient: _Spirisklient) -> list[dict]:
+    """Hämtar periodiseringar och maskerar egress."""
+    from spiris_adapter import hamta_periodiseringar as adp_hamta_periodiseringar
+    from sekretesslager import maskera_chattmeddelande
+    # Hämtar råa periodiseringar
+    rader = adp_hamta_periodiseringar(klient)
+    for p in rader:
+        if "beskrivning" in p and p["beskrivning"]:
+            p["beskrivning"] = maskera_chattmeddelande(p["beskrivning"]).text
+    return rader

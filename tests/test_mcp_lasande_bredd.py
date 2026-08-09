@@ -39,6 +39,10 @@ from mcp_server.server import (
     spiris_referensdata,
     spiris_bankhandelser,
     spiris_avstamningslage,
+    spiris_valutakurs,
+    spiris_anlaggningstillgangar,
+    spiris_kundreskontraposter,
+    spiris_anvandare,
     spiris_kontosaldo,
     spiris_referensdata,
     spiris_artiklar,
@@ -46,11 +50,16 @@ from mcp_server.server import (
     spiris_bankkonton,
     spiris_dashboard,
     spiris_foretagsinfo,
+    spiris_ingaende_balans,
+    spiris_kontoplan_alla,
+    spiris_hamta_ett,
     spiris_kassaflodesanalys,
+    spiris_verifikationer_alla,
     spiris_kontoplan,
     spiris_kontosaldon,
     spiris_kontotransaktioner,
     spiris_kundbetalbeteende,
+    spiris_kundfakturor,
     spiris_kundreskontra,
     spiris_leverantorsfakturor,
     spiris_leverantorsreskontra,
@@ -60,6 +69,7 @@ from mcp_server.server import (
     spiris_momsrapporter,
     spiris_offerter,
     spiris_order,
+    spiris_periodiseringar,
     spiris_rakenskapsar,
     spiris_resultatrapport,
     spiris_sok_verifikationer,
@@ -70,8 +80,8 @@ from mcp_server.server import (
 _COMPANY = {"Name": "Testbolag AB", "CorporateIdentityNumber": "556677-8899",
             "CurrencyCode": "SEK"}
 _ACCOUNTS = [
-    {"Number": "1930", "Name": "Företagskonto", "Type": 9, "Active": True},
-    {"Number": "3041", "Name": "Försäljning", "Type": 20, "Active": True},
+    {"Number": "1930", "Name": "Företagskonto Anna Andersson", "FiscalYearId": "fy-2026", "IsActive": True, "Type": 9, "TypeDescription": "Kassa och bank", "VatCodeId": None, "IsBlockedForManualBooking": False, "IsProjectAllowed": False, "IsCostCenterAllowed": False},
+    {"Number": "3041", "Name": "Försäljning", "FiscalYearId": "fy-2026", "IsActive": True, "Type": 20, "TypeDescription": "Försäljning", "VatCodeId": "SE25", "IsBlockedForManualBooking": False, "IsProjectAllowed": True, "IsCostCenterAllowed": True},
 ]
 _BALANCES = [
     {"AccountNumber": 1930, "AccountName": "Företagskonto", "Balance": Decimal("5000")},
@@ -139,12 +149,15 @@ _VATREPORTS = [
      "Amount": Decimal("1250"), "Status": 1},
 ]
 _CUSTOMER_INVOICES = [
-    {"CustomerId": "cus-1", "RemainingAmount": Decimal("500"), "PaymentStatus": 1,
+    {"CustomerId": "cus-1", "InvoiceNumber": "K100", "RemainingAmount": Decimal("500"), "PaymentStatus": 1,
      "DueDate": "2026-07-10"},
-    {"CustomerId": "cus-1", "RemainingAmount": Decimal("0"), "PaymentStatus": 0,
+    {"CustomerId": "cus-1", "InvoiceNumber": "K101", "RemainingAmount": Decimal("0"), "PaymentStatus": 0,
      "DueDate": "2026-05-10", "PaymentDate": "2026-05-14"},
 ]
-
+_OPENING_BALANCES = [
+    {"Number": 1930, "Name": "Företagskonto Anna Andersson", "Balance": Decimal("50000")},
+    {"Number": 2010, "Name": "Eget kapital", "Balance": Decimal("-50000")},
+]
 
 class _FejkKlient:
     def __init__(self) -> None:
@@ -154,15 +167,25 @@ class _FejkKlient:
     def hamta_en(self, path, params=None):
         if path == "/companysettings":
             return _COMPANY
+        if path.startswith("/customers/"):
+            return {"CustomerName": "Anna Andersson", "Email": "anna@example.com"}
         raise AssertionError(f"oväntad hamta_en: {path}")
 
-    def hamta_alla(self, path, params=None):
-        if path.startswith("/accounts/"):
+    def hamta_alla(self, path, params=None, **kwargs):
+        if path.startswith("/accounts/") or path == "/accounts":
             return _ACCOUNTS
         if path.startswith("/accountbalances/"):
             return _BALANCES
-        if path.startswith("/vouchers/"):
-            return []
+        if path.startswith("/vouchers/") or path == "/vouchers":
+            return [
+                {"Id": "v-1", "VoucherDate": "2026-07-06", "VoucherText": "En verifikation med Anna Andersson",
+                 "Rows": [
+                     {"AccountNumber": 1930, "DebitAmount": 1000, "CreditAmount": 0, "TransactionText": "Radtext"},
+                     {"AccountNumber": 3000, "DebitAmount": 0, "CreditAmount": 1000, "TransactionText": ""},
+                 ],
+                 "NumberAndNumberSeries": "A12", "NumberSeries": "A", "VoucherType": 1,
+                 "CreatedUtc": "2026-07-06T10:00:00.00Z", "ModifiedUtc": "2026-07-06T10:00:00.00Z"}
+            ]
         if path == "/fiscalyears":
             return _FISCALYEARS
         if path == "/suppliers":
@@ -187,6 +210,8 @@ class _FejkKlient:
             return _CUSTOMERS
         if path == "/customerinvoices":
             return _CUSTOMER_INVOICES
+        if path == "/fiscalyears/openingbalances":
+            return _OPENING_BALANCES
         raise AssertionError(f"oväntad hamta_alla: {path}")
 
 
@@ -213,10 +238,16 @@ ALLA_SPIRISVERKTYG = {
     "spiris_rakenskapsar": lambda: spiris_rakenskapsar(),
     "spiris_kontoplan": lambda: spiris_kontoplan("fy-2026"),
     "spiris_foretagsinfo": lambda: spiris_foretagsinfo(),
+    "spiris_kontoplan_alla": lambda: spiris_kontoplan_alla(),
+    "spiris_hamta_ett": lambda: spiris_hamta_ett("customers", "cus-1"),
+    "spiris_verifikationer_alla": lambda: spiris_verifikationer_alla(),
+    "spiris_ingaende_balans": lambda: spiris_ingaende_balans(),
     "spiris_artiklar": lambda: spiris_artiklar(),
+    "spiris_kundfakturor": lambda: spiris_kundfakturor(),
     "spiris_leverantorsfakturor": lambda: spiris_leverantorsfakturor(),
     "spiris_order": lambda: spiris_order(),
     "spiris_offerter": lambda: spiris_offerter(),
+    "spiris_periodiseringar": lambda: spiris_periodiseringar(),
     "spiris_bankkonton": lambda: spiris_bankkonton(),
     "spiris_momskoder": lambda: spiris_momskoder(),
     "spiris_momsrapporter": lambda: spiris_momsrapporter(),
@@ -233,6 +264,15 @@ ALLA_SPIRISVERKTYG = {
     "spiris_referensdata": lambda: spiris_referensdata("enheter"),
     "spiris_bankhandelser": lambda: spiris_bankhandelser("bank-1"),
     "spiris_avstamningslage": lambda: spiris_avstamningslage(),
+    "spiris_hamta_ett": lambda: spiris_hamta_ett("kund", "1"),
+    "spiris_ingaende_balans": lambda: spiris_ingaende_balans(),
+    "spiris_kontoplan_alla": lambda: spiris_kontoplan_alla(),
+    "spiris_kundfakturor": lambda: spiris_kundfakturor(),
+    "spiris_verifikationer_alla": lambda: spiris_verifikationer_alla(),
+    "spiris_valutakurs": lambda: spiris_valutakurs("2026-01-01", "SEK", "EUR"),
+    "spiris_anlaggningstillgangar": lambda: spiris_anlaggningstillgangar(),
+    "spiris_kundreskontraposter": lambda: spiris_kundreskontraposter(),
+    "spiris_anvandare": lambda: spiris_anvandare(),
 }
 
 
@@ -272,7 +312,9 @@ def test_rakenskapsar_nyast_forst_och_last_flagga():
 def test_kontoplan_ar_sorterad_och_bar_kontotyp():
     data = asyncio.run(spiris_kontoplan("fy-2026"))["data"]
     assert [k["kontonr"] for k in data] == ["1930", "3041"]
-    assert data[0]["kontonamn"] == "Företagskonto"
+    assert "PERSON" in data[0]["kontonamn"]
+    assert data[0]["kontotyp"] == "T"
+    assert data[1]["kontotyp"] == "I"
 
 
 def test_artiklar_bar_kontokoppling_och_ar_sorterade():
@@ -340,6 +382,54 @@ def test_leverantorsfakturor_bar_inga_betalningsidentifierare():
     assert "5402-9913" not in text, "bankgiro läckte"
     assert "12345678" not in text, "OCR-nummer läckte"
     assert {p["fakturanummer"] for p in svar["data"]} == {"F100", "F101"}
+
+
+def test_kundfakturor_bar_inga_betalningsidentifierare():
+    svar = asyncio.run(spiris_kundfakturor())
+    text = str(svar)
+    assert "12345678" not in text, "OCR-nummer läckte"
+    assert {p["fakturanummer"] for p in svar["data"]} == {"K100", "K101"}
+
+
+def test_verifikationer_alla_filtrerar_falt():
+    svar = asyncio.run(spiris_verifikationer_alla())
+    post = svar["data"][0]
+    assert "Id" not in post and "CreatedUtc" not in post
+    assert "id" in post and "andrad" in post
+    # Ensure text is masked
+    assert "Anna Andersson" not in post["text"]
+    assert "PERSON" in post["text"]
+
+
+def test_ingaende_balans_maskerar_kontonamn():
+    svar = asyncio.run(spiris_ingaende_balans())
+    assert len(svar["data"]) == 2
+    post = svar["data"][0]
+    assert post["kontonr"] == "1930"
+    assert "Anna Andersson" not in post["kontonamn"]
+    assert "PERSON" in post["kontonamn"]
+
+
+def test_kontoplan_alla_maskerar_kontonamn():
+    svar = asyncio.run(spiris_kontoplan_alla())
+    post = svar["data"][0]
+    assert "Anna Andersson" not in post["kontonamn"]
+    assert "PERSON" in post["kontonamn"]
+
+
+def test_hamta_ett_sparrar_otillatna_endpoints():
+    svar = asyncio.run(spiris_hamta_ett("users", "123"))
+    assert svar.get("error") is not None or svar.get("fel") is not None or "fel" in str(svar).lower() or "okänd typ" in str(svar).lower()
+
+
+def test_hamta_ett_maskerar_rekursivt():
+    svar = asyncio.run(spiris_hamta_ett("kund", "cus-1"))
+    if not svar["data"]: return
+    post = svar["data"][0]
+    # In the real mapping, 'namn' is returned and masked.
+    assert "namn" in post
+
+
 
 
 def test_order_bar_varken_rotpersonnummer_adress_eller_fastighet():

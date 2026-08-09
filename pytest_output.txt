@@ -1,0 +1,126 @@
+........................................................................ [  3%]
+........................................................................ [  6%]
+........................................................................ [ 10%]
+........................................................................ [ 13%]
+........................................................................ [ 16%]
+........................................................................ [ 20%]
+........................................................................ [ 23%]
+........................................................................ [ 26%]
+........................................................................ [ 30%]
+........................................................................ [ 33%]
+........................................................................ [ 36%]
+........................................................................ [ 40%]
+.......................................................F................ [ 43%]
+......................................................................FF [ 47%]
+........................................................................ [ 50%]
+........................................................................ [ 53%]
+.......................................s................................ [ 57%]
+........................................................................ [ 60%]
+........................................................................ [ 63%]
+........................................................................ [ 67%]
+........................................................................ [ 70%]
+........................................................................ [ 73%]
+........................................................................ [ 77%]
+........................................................................ [ 80%]
+...............................................F........................ [ 84%]
+........................................................................ [ 87%]
+........................................................................ [ 90%]
+........................................................................ [ 94%]
+........................................................................ [ 97%]
+.....................................................                    [100%]
+================================== FAILURES ===================================
+______________________ test_hamta_ett_maskerar_rekursivt ______________________
+
+    def test_hamta_ett_maskerar_rekursivt():
+        svar = asyncio.run(spiris_hamta_ett("kund", "cus-1"))
+>       post = svar["data"][0]
+               ^^^^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+G:\My Drive\Claude Cowork\sie-mcp\tests\test_mcp_lasande_bredd.py:412: IndexError
+---------------------------- Captured stderr call -----------------------------
+[sie-mcp] Fel vid Spiris-hämtning (KeyError).
+______________ test_alla_registrerade_verktyg_har_ett_sparrtest _______________
+
+    def test_alla_registrerade_verktyg_har_ett_sparrtest():
+        """Metatest över HELA registret, inte bara Spiris-verktygen.
+    
+        `visa_anvandarvillkor` är det enda undantaget — det måste vara anropbart i
+        spärrat läge, annars kan användaren inte få veta hur hon godkänner."""
+        registrerade = {t.name for t in asyncio.run(server_modul.mcp.list_tools())}
+        # Fas 6-aliaser: rena en-rads-delegerare till spiris_*-verktygen. Täcks
+        # implicit av respektive spiris_*-test ovan — behöver inga egna sparrtester.
+        alias_verktyg = {
+            "kontosaldon", "kontotransaktioner", "sok_verifikationer",
+            "resultatrapport", "balansrapport", "rakenskapsar", "kontoplan",
+            "foretagsinfo", "artiklar", "leverantorsfakturor", "order",
+            "offerter", "bankkonton", "momskoder", "momsrapporter",
+            "momsoversikt", "kassaflodesanalys", "dashboard", "verifikatutkast",
+            "leverantorsreskontra", "kundreskontra", "kundbetalbeteende",
+            "likviditetsprognos", "kunder", "leverantorer", "projekt",
+            "kostnadsstallen", "kontosaldo", "referensdata", "bankhandelser",
+            "avstamningslage",
+        }
+        tackta = (
+            set(SPIRIS_ARGUMENT)
+            | {"berakna_vasentlighet", "granska_kontotyper"}
+            | {"forbered_kund", "forbered_kundfaktura", "forbered_verifikat",
+               "kontrollera_utkast"}
+            | {"forbered_fakturautskick", "forbered_betalningspaminnelse",
+               "forbered_betalningsregistrering", "forbered_makulering"}
+            | {"forbered_saljdokumentutskick", "forbered_efakturautskick",
+               "forbered_saljdokumentatgard"}
+            | {"sok_lagstiftning", "skatteverket_rattslig_vagledning"}
+            | {"forbered_leverantorsfakturautkast", "forbered_attest",
+               "forbered_leverantorsbetalning"}
+            | {"forbered_masterdataandring", "forbered_masterdataborttagning"}
+            | {"forbered_sie4import"}
+            | {"visa_anvandarvillkor"}
+            | alias_verktyg
+        )
+        saknas = registrerade - tackta
+>       assert not saknas, f"verktyg utan spärrtest: {sorted(saknas)}"
+E       AssertionError: verktyg utan spärrtest: ['hamta_ett', 'ingaende_balans', 'kontoplan_alla', 'kundfakturor', 'spiris_hamta_ett', 'spiris_ingaende_balans', 'spiris_kontoplan_alla', 'spiris_kundfakturor', 'spiris_verifikationer_alla', 'verifikationer_alla']
+E       assert not {'hamta_ett', 'ingaende_balans', 'kontoplan_alla', 'kundfakturor', 'spiris_hamta_ett', 'spiris_ingaende_balans', ...}
+
+tests\test_mcp_villkorssparr.py:287: AssertionError
+______________ test_alla_spirisverktyg_ar_tackta_av_sparrsviten _______________
+
+    def test_alla_spirisverktyg_ar_tackta_av_sparrsviten():
+        """Metatest: varje registrerat Spiris-verktyg måste ha argument i
+        SPIRIS_ARGUMENT, annars saknar det spärrtest.
+    
+        Detta är sviten som gör att ett framtida verktyg inte kan glömmas bort. Blir
+        testet rött är åtgärden att lägga till raden — aldrig att lätta på kravet."""
+        registrerade = {
+            t.name
+            for t in asyncio.run(server_modul.mcp.list_tools())
+            if t.name.startswith("spiris_")
+        }
+        saknas = registrerade - set(SPIRIS_ARGUMENT)
+>       assert not saknas, f"Spiris-verktyg utan spärrtest: {sorted(saknas)}"
+E       AssertionError: Spiris-verktyg utan spärrtest: ['spiris_hamta_ett', 'spiris_ingaende_balans', 'spiris_kontoplan_alla', 'spiris_kundfakturor', 'spiris_verifikationer_alla']
+E       assert not {'spiris_hamta_ett', 'spiris_ingaende_balans', 'spiris_kontoplan_alla', 'spiris_kundfakturor', 'spiris_verifikationer_alla'}
+
+tests\test_mcp_villkorssparr.py:302: AssertionError
+__________ TestEtapp1ODataParametrar.test_referensdata_skickar_odata __________
+
+self = <test_spiris_adapter.TestEtapp1ODataParametrar object at 0x000002313D6A0AF0>
+
+    def test_referensdata_skickar_odata(self):
+        from spiris_adapter import hamta_referensdata
+        klient = self._FangarKlient()
+        hamta_referensdata(klient, "valutor", filter="Namn", select=["Id"], orderby="Namn", pagesize=10)
+>       assert klient.anrop[0] == ("/currencies", "Namn", ["Id"], "Namn", 10)
+E       AssertionError: assert ('/currencies...e, None, None) == ('/currencies...], 'Namn', 10)
+E         
+E         At index 1 diff: None != 'Namn'
+E         Use -v to get more diff
+
+tests\test_spiris_adapter.py:1672: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_mcp_lasande_bredd.py::test_hamta_ett_maskerar_rekursivt - I...
+FAILED tests/test_mcp_villkorssparr.py::test_alla_registrerade_verktyg_har_ett_sparrtest
+FAILED tests/test_mcp_villkorssparr.py::test_alla_spirisverktyg_ar_tackta_av_sparrsviten
+FAILED tests/test_spiris_adapter.py::TestEtapp1ODataParametrar::test_referensdata_skickar_odata
+4 failed, 2136 passed, 1 skipped in 29.50s

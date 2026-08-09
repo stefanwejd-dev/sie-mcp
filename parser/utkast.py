@@ -88,8 +88,12 @@ GILTIGA_TYPER = (
     # Steg 7: masterdata.
     "masterdataandring",
     "masterdataborttagning",
-    # Steg 8: SIE4-import.
     "sie4import",
+    # Steg 4: utkastvägen.
+    "utkastandring",
+    "utkastborttagning",
+    "utkastbokforing",
+    "periodisering",
 )
 
 

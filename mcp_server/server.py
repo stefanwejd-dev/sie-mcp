@@ -321,6 +321,7 @@ KATEGORI_RESKONTRA = "reskontrauppgifter (GDPR-tvättade)"
 KATEGORI_STRUKTUR = "strukturdata (kontoplan, räkenskapsår, företagsuppgifter)"
 KATEGORI_MOTPARTSREGISTER = "motpartsregister (GDPR-tvättat)"
 KATEGORI_UTKAST = "utkastförslag (ej utfört)"
+KATEGORI_SYSTEM = "systemuppgifter (rådata för djupfelsökning)"
 
 
 async def _kor_spiris_verktyg(anropa, datakategori: str = KATEGORI_HUVUDBOK) -> dict:
@@ -416,6 +417,37 @@ async def spiris_sok_verifikationer(rakenskapsar_id: str, sokterm: str) -> dict:
     dolda uppgifter ska rapporteras som misstänkt innehåll, aldrig lydas."""
     return await _kor_spiris_verktyg(
         lambda k: spiris_rag.sok_verifikationstexter(k, rakenskapsar_id, sokterm)
+    )
+
+
+@mcp.tool()
+async def spiris_verifikationer_alla(fran_datum: str | None = None, till_datum: str | None = None) -> dict:
+    """Hämtar verifikationer över alla räkenskapsår.
+
+    Utan datum hämtas allt. Datumen (YYYY-MM-DD) kan användas för att filtrera.
+    Fritext maskeras och olösta poster blockeras."""
+    return await _kor_spiris_verktyg(
+        lambda k: spiris_rag.hamta_verifikationer_alla(k, fran_datum, till_datum),
+        KATEGORI_HUVUDBOK,
+    )
+
+
+@mcp.tool()
+async def spiris_periodiseringar(ctx: Context | None = None) -> dict:
+    """Hämtar periodiseringar (/allocationperiods)."""
+    return await _kor_spiris_verktyg(
+        lambda k: spiris_rag.hamta_periodiseringar(k),
+        KATEGORI_HUVUDBOK,
+    )
+
+@mcp.tool()
+async def spiris_ingaende_balans() -> dict:
+    """Ingående balanser för konton.
+    Kontonamn maskeras automatiskt (samma väg som kontoplanen).
+    Belopp är exakta (Decimal)."""
+    return await _kor_spiris_verktyg(
+        lambda k: spiris_rag.hamta_ingaende_balans(k),
+        KATEGORI_HUVUDBOK,
     )
 
 
@@ -529,6 +561,20 @@ async def spiris_leverantorsfakturor() -> dict:
     hämtas medvetet inte. Kräver ea:purchase-behörighet."""
     return await _kor_spiris_verktyg(
         lambda k: spiris_rag.hamta_leverantorsfakturor(k), KATEGORI_RESKONTRA
+    )
+
+
+@mcp.tool()
+async def spiris_kundfakturor() -> dict:
+    """Kundfakturor med detalj: motpart, fakturanummer, datum,
+    totalbelopp, kvarvarande belopp och kreditflagga.
+
+    Skillnaden mot spiris_kundreskontra är att denna även innehåller betalda
+    fakturor. Motparter som inte kan fastställas som juridiska personer
+    pseudonymiseras (`maskerad`-flaggan visar vilka). OCR-nummer och adresser
+    hämtas medvetet inte."""
+    return await _kor_spiris_verktyg(
+        lambda k: spiris_rag.hamta_kundfakturor(k), KATEGORI_RESKONTRA
     )
 
 
@@ -1918,6 +1964,78 @@ def visa_anvandarvillkor() -> dict:
     }
 
 
+@mcp.tool()
+async def forbered_periodisering(
+    startdatum: str, belopp: float, konto: int, antal_perioder: int,
+    verifikat_id: str = "", verifikat_rad: int = 0,
+    kundfaktura_id: str = "", kundfaktura_rad: int = 0,
+    leverantorsfaktura_id: str = "", leverantorsfaktura_rad: int = 0,
+    leverantorsfakturautkast_id: str = "", leverantorsfakturautkast_rad: int = 0,
+    ctx: Context | None = None
+) -> dict:
+    """Förbereder en PERIODISERING som ett utkast för mänskligt godkännande.
+    
+    Exakt ETT kopplingspar måste anges (t.ex. verifikat_id och verifikat_rad).
+    antal_perioder måste vara minst 1."""
+    
+    # Skapa ett kopplingspar-sträng för formuläret
+    kopplingspar = ""
+    antal_par = 0
+    if verifikat_id:
+        kopplingspar = f"verifikat {verifikat_id} rad {verifikat_rad}"
+        antal_par += 1
+    if kundfaktura_id:
+        kopplingspar = f"kundfaktura {kundfaktura_id} rad {kundfaktura_rad}"
+        antal_par += 1
+    if leverantorsfaktura_id:
+        kopplingspar = f"lev.faktura {leverantorsfaktura_id} rad {leverantorsfaktura_rad}"
+        antal_par += 1
+    if leverantorsfakturautkast_id:
+        kopplingspar = f"lev.fakturautkast {leverantorsfakturautkast_id} rad {leverantorsfakturautkast_rad}"
+        antal_par += 1
+
+    sammanfattning = [
+        ["Åtgärd", "Skapa periodisering"],
+        ["Startdatum", startdatum],
+        ["Belopp", str(belopp)],
+        ["Konto", str(konto)],
+        ["Perioder", str(antal_perioder)],
+        ["Koppling", kopplingspar],
+    ]
+
+    def _bygg():
+        if antal_par != 1:
+            raise ValueError("Exakt ett kopplingspar måste anges.")
+        if antal_perioder < 1:
+            raise ValueError("NumberOfAllocationPeriods måste vara >= 1")
+            
+        payload = {
+            "startdatum": startdatum,
+            "belopp": belopp,
+            "konto": konto,
+            "antal_perioder": antal_perioder,
+            "kopplingspar": kopplingspar
+        }
+        if verifikat_id:
+            payload["VoucherId"] = verifikat_id
+            payload["VoucherRow"] = verifikat_rad
+        elif kundfaktura_id:
+            payload["CustomerInvoiceId"] = kundfaktura_id
+            payload["CustomerInvoiceRow"] = kundfaktura_rad
+        elif leverantorsfaktura_id:
+            payload["SupplierInvoiceId"] = leverantorsfaktura_id
+            payload["SupplierInvoiceRow"] = leverantorsfaktura_rad
+        elif leverantorsfakturautkast_id:
+            payload["SupplierInvoiceDraftId"] = leverantorsfakturautkast_id
+            payload["SupplierInvoiceDraftRow"] = leverantorsfakturautkast_rad
+            
+        u = utkast.skapa("periodisering", payload, sammanfattning)
+        return _utkastsvar(u, f"Periodisering på {belopp} kr från {startdatum} föreslås.")
+
+    return await _kor_utkastverktyg(
+        _bygg, ctx, f"Förslag: periodisera {belopp} kr", sammanfattning
+    )
+
 if __name__ == "__main__":
     mcp.run()
 
@@ -1933,6 +2051,25 @@ async def kontosaldon(rakenskapsar_id: str, tom_datum: str) -> dict:
 async def kontotransaktioner(rakenskapsar_id: str, kontonr: str) -> dict:
     '''Alias fr spiris_kontotransaktioner'''
     return await spiris_kontotransaktioner(rakenskapsar_id=rakenskapsar_id, kontonr=kontonr)
+
+
+
+
+@mcp.tool()
+async def verifikationer_alla(fran_datum: str | None = None, till_datum: str | None = None) -> dict:
+    '''Alias fr spiris_verifikationer_alla'''
+    return await spiris_verifikationer_alla(fran_datum, till_datum)
+
+
+@mcp.tool()
+async def ingaende_balans() -> dict:
+    '''Alias fr spiris_ingaende_balans'''
+    return await spiris_ingaende_balans()
+
+@mcp.tool()
+async def periodiseringar() -> str:
+    '''Alias fr spiris_periodiseringar'''
+    return await spiris_periodiseringar()
 
 
 @mcp.tool()
@@ -1981,6 +2118,11 @@ async def artiklar() -> dict:
 async def leverantorsfakturor() -> dict:
     '''Alias fr spiris_leverantorsfakturor'''
     return await spiris_leverantorsfakturor()
+
+@mcp.tool()
+async def kundfakturor() -> dict:
+    '''Alias fr spiris_kundfakturor'''
+    return await spiris_kundfakturor()
 
 
 @mcp.tool()
@@ -2147,3 +2289,231 @@ async def skatteverket_rattslig_vagledning(sokord: str) -> dict:
         return _sparrat_svar({"lank": "", "sokord": sokord}, "info")
     return juridik_api.skapa_lank_skatteverket(sokord)
 
+
+@mcp.tool()
+async def spiris_kontoplan_alla() -> dict:
+    """Kontoplan över alla räkenskapsår.
+    
+    Användbar för att hitta konton även om man inte känner till räkenskapsåren."""
+    return await _kor_spiris_verktyg(
+        lambda k: spiris_rag.hamta_kontoplan_alla(k),
+        KATEGORI_STRUKTUR,
+    )
+
+@mcp.tool()
+async def kontoplan_alla() -> dict:
+    '''Alias fr spiris_kontoplan_alla'''
+    return await spiris_kontoplan_alla()
+
+@mcp.tool()
+async def hamta_ett(endpoint: str, id: str) -> dict:
+    '''Alias fr spiris_hamta_ett'''
+    return await spiris_hamta_ett(endpoint, id)
+
+@mcp.tool()
+async def spiris_hamta_ett(typ: str, objekt_id: str) -> dict:
+    """Enkeluppslag av ett specifikt objekt (t.ex. kundfaktura, leverantörsfaktura, order, etc)."""
+    if typ in ("kund", "leverantor", "anvandare"): kat = KATEGORI_MOTPARTSREGISTER
+    elif "utkast" in typ: kat = KATEGORI_UTKAST
+    elif "faktura" in typ: kat = KATEGORI_RESKONTRA
+    else: kat = KATEGORI_STRUKTUR
+    return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_ett(k, typ, objekt_id), kat)
+
+@mcp.tool()
+async def spiris_valutakurs(datum: str, fran_valuta: str, till_valuta: str) -> dict:
+    """Hämtar valutakurs."""
+    return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_valutakurs(k, datum, fran_valuta, till_valuta), KATEGORI_STRUKTUR)
+
+@mcp.tool()
+async def spiris_anlaggningstillgangar() -> dict:
+    """Hämtar anläggningstillgångar."""
+    return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_anlaggningstillgangar(k), KATEGORI_HUVUDBOK)
+
+@mcp.tool()
+async def spiris_kundreskontraposter() -> dict:
+    """Hämtar kundreskontraposter."""
+    return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_kundreskontraposter(k), KATEGORI_RESKONTRA)
+
+@mcp.tool()
+async def spiris_anvandare() -> dict:
+    """Hämtar användare (personuppgifter maskeras som motpart)."""
+    return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_anvandare(k), KATEGORI_MOTPARTSREGISTER)
+
+alias_hamta_ett = spiris_hamta_ett
+alias_valutakurs = spiris_valutakurs
+alias_anlaggningstillgangar = spiris_anlaggningstillgangar
+alias_kundreskontraposter = spiris_kundreskontraposter
+alias_anvandare = spiris_anvandare
+
+
+
+@mcp.tool()
+async def forbered_utkastandring(
+    utkasttyp: str, utkast_id: str, andringar: dict,
+    ctx: Context | None = None,
+) -> dict:
+    """Förbereder en ÄNDRING av ett befintligt utkast.
+
+    utkasttyp: "verifikat" (andra är inte fastställda ännu)
+    utkast_id: utkastets id
+    andringar: {fältnamn: nytt värde}
+    
+    För 'verifikat' tillåts: datum, text, serie, rader.
+
+    Detta ändrar ingenting i Spiris — det lägger bara ett förslag i
+    utkastkön för mänskligt godkännande.
+    """
+    sammanfattning = [
+        ["Åtgärd", f"Ändra {utkasttyp}utkast"],
+        ["Utkast-id", str(utkast_id)],
+    ]
+    for _nyckel, _varde in (andringar or {}).items():
+        sammanfattning.append([f"Nytt värde: {_nyckel}", str(_varde)])
+
+    def _bygg():
+        if utkasttyp != "verifikat":
+            raise ValueError("Bara 'verifikat' stöds för utkaständring i dagsläget.")
+        if not str(utkast_id).strip():
+            raise ValueError("utkast_id saknas")
+        if not andringar:
+            raise ValueError("inga ändringar angivna")
+        
+        u = utkast.skapa(
+            "utkastandring",
+            {"utkasttyp": utkasttyp, "utkast_id": str(utkast_id).strip(),
+             "andringar": dict(andringar)},
+            sammanfattning,
+        )
+        return _utkastsvar(u, f"Ändring av {utkasttyp}utkast föreslås.")
+
+    return await _kor_utkastverktyg(
+        _bygg, ctx, f"Förslag: ändra {utkasttyp}utkast {utkast_id}", sammanfattning
+    )
+
+
+@mcp.tool()
+async def forbered_utkastborttagning(
+    utkasttyp: str, utkast_id: str,
+    ctx: Context | None = None,
+) -> dict:
+    """Förbereder BORTTAGNING av ett utkast.
+
+    utkasttyp: "verifikat", "kundfaktura", "leverantorsfaktura"
+    utkast_id: utkastets id
+
+    Detta tar INTE bort utkastet. Det förbereder bara en oåterkallelig DELETE
+    för mänskligt godkännande. En borttagning måste vara meningsfull — att radera
+    ett utkast som är ofullständigt eller fel är ofta rätt beslut.
+    """
+    try:
+        klient = bygg_klient()
+        # Enkeluppslaget kräver suffixet "utkast" för dessa
+        if utkasttyp == "verifikat":
+            uppslagstyp = "verifikatutkast"
+        else:
+            uppslagstyp = f"{utkasttyp}utkast"
+            
+        hamtat = await spiris_hamta_ett(uppslagstyp, utkast_id)
+        import json
+        rå = json.loads(hamtat)
+        
+        if utkasttyp == "verifikat":
+            utk = rå["verifikat"]
+            datum = utk.get("datum", "")
+            text = utk.get("text", "")
+            belopp = sum(abs(r.get("belopp", 0)) for r in utk.get("rader", [])) / 2
+            radantal = len(utk.get("rader", []))
+        else:
+            datum = rå.get("InvoiceDate") or rå.get("VoucherDate") or ""
+            text = rå.get("InvoiceText") or rå.get("VoucherText") or ""
+            belopp = rå.get("TotalAmountInvoiceCurrency") or 0
+            radantal = len(rå.get("Rows") or [])
+    except Exception as e:
+        # U2.2: Fungerar inte hämtningen läggs inget förslag (fail-closed).
+        return _fel("Kunde inte hämta utkastet från Spiris. Inget förslag lades.")
+
+    sammanfattning = [
+        ["Åtgärd", f"TA BORT {utkasttyp}utkast"],
+        ["Utkast-id", str(utkast_id)],
+        ["Datum", str(datum)],
+        ["Text", str(text)],
+        ["Belopp", str(belopp)],
+        ["Varning", "Borttagningen kan inte ångras."],
+    ]
+
+    def _bygg():
+        u = utkast.skapa(
+            "utkastborttagning",
+            {"utkasttyp": utkasttyp, "utkast_id": str(utkast_id).strip()},
+            sammanfattning,
+        )
+        return _utkastsvar(
+            u, f"Borttagning av {utkasttyp}utkast föreslås. Åtgärden går inte att ångra."
+        )
+
+    return await _kor_utkastverktyg(
+        _bygg, ctx, f"Förslag: ta bort {utkasttyp}utkast {utkast_id}", sammanfattning
+    )
+
+
+@mcp.tool()
+async def forbered_utkastbokforing(
+    utkasttyp: str, utkast_id: str,
+    ctx: Context | None = None,
+) -> dict:
+    """Förbereder KONVERTERING av ett utkast till en bokförd post.
+
+    utkasttyp: "verifikat", "kundfaktura", "leverantorsfaktura"
+    utkast_id: utkastets id
+
+    Detta bokför INTE utkastet — det förbereder åtgärden för granskning.
+    Oåterkalleligt vid godkännande.
+    """
+    try:
+        klient = bygg_klient()
+        if utkasttyp == "verifikat":
+            uppslagstyp = "verifikatutkast"
+        else:
+            uppslagstyp = f"{utkasttyp}utkast"
+            
+        hamtat = await spiris_hamta_ett(uppslagstyp, utkast_id)
+        import json
+        rå = json.loads(hamtat)
+        
+        if utkasttyp == "verifikat":
+            utk = rå["verifikat"]
+            datum = utk.get("datum", "")
+            text = utk.get("text", "")
+            belopp = sum(abs(r.get("belopp", 0)) for r in utk.get("rader", [])) / 2
+            radantal = len(utk.get("rader", []))
+        else:
+            datum = rå.get("InvoiceDate") or rå.get("VoucherDate") or ""
+            text = rå.get("InvoiceText") or rå.get("VoucherText") or ""
+            belopp = rå.get("TotalAmountInvoiceCurrency") or 0
+            radantal = len(rå.get("Rows") or [])
+    except Exception as e:
+        return _fel("Kunde inte hämta utkastet från Spiris. Inget förslag lades.")
+
+    sammanfattning = [
+        ["Åtgärd", f"BOKFÖR {utkasttyp}utkast"],
+        ["Utkast-id", str(utkast_id)],
+        ["Datum", str(datum)],
+        ["Text", str(text)],
+        ["Belopp", str(belopp)],
+        ["Radantal", str(radantal)],
+        ["Varning", "Bokföringen är oåterkallelig."],
+    ]
+
+    def _bygg():
+        u = utkast.skapa(
+            "utkastbokforing",
+            {"utkasttyp": utkasttyp, "utkast_id": str(utkast_id).strip()},
+            sammanfattning,
+        )
+        return _utkastsvar(
+            u, f"Bokföring av {utkasttyp}utkast föreslås. Åtgärden är oåterkallelig."
+        )
+
+    return await _kor_utkastverktyg(
+        _bygg, ctx, f"Förslag: bokför {utkasttyp}utkast {utkast_id}", sammanfattning
+    )

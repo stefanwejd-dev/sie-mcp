@@ -631,6 +631,19 @@ def utfor_utkast(
             nyttolast["andringar"],
         )
 
+    if typ == UTKASTTYP_UTKASTANDRING:
+        return andra_utkast(
+            klient, nyttolast["utkasttyp"], nyttolast["utkast_id"],
+            nyttolast["andringar"]
+        )
+
+    if typ == UTKASTTYP_UTKASTBORTTAGNING:
+        ta_bort_utkast(klient, nyttolast["utkasttyp"], nyttolast["utkast_id"])
+        return {"borttaget": nyttolast["utkast_id"]}
+
+    if typ == UTKASTTYP_UTKASTBOKFORING:
+        return bokfor_utkast(klient, nyttolast["utkasttyp"], nyttolast["utkast_id"])
+
     if typ == UTKASTTYP_MASTERDATABORTTAGNING:
         ta_bort_masterdata(
             klient, nyttolast["objekttyp"], nyttolast["objekt_id"]
@@ -1588,7 +1601,7 @@ _FAKTURATYP_ETIKETTER: dict[str, str] = {
 }
 
 
-def hamta_kunder(klient: _Spirisklient) -> list[dict]:
+def hamta_kunder(klient: _Spirisklient, *, filter: str | None = None, select: list[str] | None = None, orderby: str | None = None, pagesize: int | None = None) -> list[dict]:
     """Kundregistret med maskerade motpartsnamn. Juridiska personer står i
     klartext, privatpersoner och okända namn som stabila pseudonymer.
     Innehåller varken kontaktuppgifter, adresser, organisationsnummer eller
@@ -1596,7 +1609,7 @@ def hamta_kunder(klient: _Spirisklient) -> list[dict]:
     """
     vakt = _bygg_namnvakt()
     rader: list[dict] = []
-    for rå in klient.hamta_alla("/customers"):
+    for rå in klient.hamta_alla("/customers", filter=filter, select=select, orderby=orderby, pagesize=pagesize):
         visat, maskerad = _motpartsnamn(
             rå["Name"],
             rå.get("CorporateIdentityNumber") or "",
@@ -1618,7 +1631,7 @@ def hamta_kunder(klient: _Spirisklient) -> list[dict]:
     return rader
 
 
-def hamta_leverantorer(klient: _Spirisklient) -> list[dict]:
+def hamta_leverantorer(klient: _Spirisklient, *, filter: str | None = None, select: list[str] | None = None, orderby: str | None = None, pagesize: int | None = None) -> list[dict]:
     """Leverantörsregistret med maskerade motpartsnamn. Juridiska personer står i
     klartext, okända namn som stabila pseudonymer. Innehåller varken
     kontaktuppgifter, adresser, organisationsnummer eller betalningsidentifierare
@@ -1626,7 +1639,7 @@ def hamta_leverantorer(klient: _Spirisklient) -> list[dict]:
     """
     vakt = _bygg_namnvakt()
     rader: list[dict] = []
-    for rå in klient.hamta_alla("/suppliers"):
+    for rå in klient.hamta_alla("/suppliers", filter=filter, select=select, orderby=orderby, pagesize=pagesize):
         visat, maskerad = _motpartsnamn(
             rå["Name"],
             rå.get("CorporateIdentityNumber") or "",
@@ -1649,7 +1662,7 @@ def hamta_leverantorer(klient: _Spirisklient) -> list[dict]:
 
 _PROJEKTSTATUS: dict[int, str] = {1: "Pågående", 2: "Avslutat"}
 
-def hamta_projekt(klient: _Spirisklient) -> list[dict]:
+def hamta_projekt(klient: _Spirisklient, *, filter: str | None = None, select: list[str] | None = None, orderby: str | None = None, pagesize: int | None = None) -> list[dict]:
     """Projektregistret med dubbla maskeringsregler: projektnamnet betraktas
     som en egen etikett och maskeras med en generell etikettmaskerare,
     medan eventuell kund betraktas som en motpart. Exkluderar Notes.
@@ -1658,7 +1671,7 @@ def hamta_projekt(klient: _Spirisklient) -> list[dict]:
     motpart_vakt = _bygg_namnvakt()
     
     rader: list[dict] = []
-    for rå in klient.hamta_alla("/projects"):
+    for rå in klient.hamta_alla("/projects", filter=filter, select=select, orderby=orderby, pagesize=pagesize):
         kund_namn = rå.get("CustomerName") or ""
         if kund_namn:
             visat_kund, maskerad_kund = _motpartsnamn(kund_namn, "", False, motpart_vakt)
@@ -1684,13 +1697,13 @@ def hamta_projekt(klient: _Spirisklient) -> list[dict]:
     return rader
 
 
-def hamta_kostnadsstallen(klient: _Spirisklient) -> list[dict]:
+def hamta_kostnadsstallen(klient: _Spirisklient, *, filter: str | None = None, select: list[str] | None = None, orderby: str | None = None, pagesize: int | None = None) -> list[dict]:
     """Kostnadsställen och dess poster, med etikettmaskering.
     Delar en och samma maskerare så att samma namn ger samma pseudonym."""
     etikett_maskerare = skapa_kontonamnsmaskerare(las_namnreferens())
     
     rader: list[dict] = []
-    for rå in klient.hamta_alla("/costcenters"):
+    for rå in klient.hamta_alla("/costcenters", filter=filter, select=select, orderby=orderby, pagesize=pagesize):
         poster_rå = rå.get("Items") or []
         poster_ut = []
         for p in poster_rå:
@@ -1711,11 +1724,16 @@ def hamta_kostnadsstallen(klient: _Spirisklient) -> list[dict]:
     return rader
 
 
-def hamta_kontosaldo(klient, kontonr: str, per_datum: str) -> dict:
+def hamta_kontosaldo(klient: _Spirisklient, kontonr: str, per_datum: str, *, filter: str | None = None, select: list[str] | None = None, orderby: str | None = None, pagesize: int | None = None) -> dict:
     """Enskilt kontosaldo per datum. Returnerar ett dict (inte lista).
     Kontonamn maskeras med etikettmaskerare (egen etikett, inte motpart)."""
     etikett_maskerare = skapa_kontonamnsmaskerare(las_namnreferens())
-    rå = klient.hamta_en(f"/accountbalances/{kontonr}/{per_datum}")
+    params = {}
+    if filter: params["$filter"] = filter
+    if select: params["$select"] = ",".join(select)
+    if orderby: params["$orderby"] = orderby
+    if pagesize: params["$pagesize"] = str(pagesize)
+    rå = klient.hamta_en(f"/accountbalances/{kontonr}/{per_datum}", params=params or None)
     
     return {
         "kontonr": str(rå.get("AccountNumber", "")),
@@ -1725,7 +1743,7 @@ def hamta_kontosaldo(klient, kontonr: str, per_datum: str) -> dict:
     }
 
 
-def hamta_referensdata(klient: _Spirisklient, typ: str) -> list[dict]:
+def hamta_referensdata(klient: _Spirisklient, typ: str, *, filter: str | None = None, select: list[str] | None = None, orderby: str | None = None, pagesize: int | None = None) -> list[dict]:
     """Dynamisk hämtning av referenslistor. Bara de entiteter vi explicit känner till."""
     giltiga = {
         "artiklar": "/articles",
@@ -1736,7 +1754,7 @@ def hamta_referensdata(klient: _Spirisklient, typ: str) -> list[dict]:
     }
     if typ not in giltiga:
         raise SpirisKlientFel(f"Okänd referenstyp: {typ!r}. Giltiga: {list(giltiga.keys())}")
-    return klient.hamta_alla(giltiga[typ])
+    return klient.hamta_alla(giltiga[typ], filter=filter, select=select, orderby=orderby, pagesize=pagesize)
 
 
 def hamta_verifikatutkast(klient: _Spirisklient) -> list[Verifikation]:
@@ -1762,7 +1780,7 @@ _REFERENSTYPER: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     "kontotyper":         ("/accountTypes",    (("typ","Type"), ("beskrivning","TypeDescription"))),
 }
 
-def hamta_referensdata(klient: _Spirisklient, typ: str) -> list[dict]:
+def hamta_referensdata(klient: _Spirisklient, typ: str, *, filter: str | None = None, select: list[str] | None = None, orderby: str | None = None, pagesize: int | None = None) -> list[dict]:
     """Referensdata från åtta olika endpoints.
     Ingen maskering här eftersom värderymden (måttenheter, valutakoder,
     landskoder, etc) annars hade matchat oskyldiga ord (tex "timme" till PERSON_1),
@@ -1770,7 +1788,7 @@ def hamta_referensdata(klient: _Spirisklient, typ: str) -> list[dict]:
     """
     if typ == "momssatser":
         rader = []
-        for rå in klient.hamta_alla("/vatcodesrates"):
+        for rå in klient.hamta_alla("/vatcodesrates", filter=filter, select=select, orderby=orderby, pagesize=pagesize):
             rader.append({
                 "id": rå.get("Id"),
                 "kod": rå.get("Code"),
@@ -1788,7 +1806,7 @@ def hamta_referensdata(klient: _Spirisklient, typ: str) -> list[dict]:
 
     path, fält = _REFERENSTYPER[typ]
     rader = []
-    for rå in klient.hamta_alla(path):
+    for rå in klient.hamta_alla(path, filter=filter, select=select, orderby=orderby, pagesize=pagesize):
         rad = {}
         for domännyckel, spirisfält in fält:
             rad[domännyckel] = rå.get(spirisfält)
@@ -2573,6 +2591,11 @@ def registrera_leverantorsbetalning(
 UTKASTTYP_MASTERDATAANDRING = "masterdataandring"
 UTKASTTYP_MASTERDATABORTTAGNING = "masterdataborttagning"
 
+UTKASTTYP_UTKASTANDRING = "utkastandring"
+UTKASTTYP_UTKASTBORTTAGNING = "utkastborttagning"
+UTKASTTYP_UTKASTBOKFORING = "utkastbokforing"
+
+
 # objekttyp -> (sökvägsprefix, {domännyckel: spirisfält})
 _MASTERDATA: dict[str, tuple[str, dict[str, str]]] = {
     "kund": ("/customers", {
@@ -2677,6 +2700,107 @@ def _kontrollera_byggmomsforutsattning(
             "skattskyldighet kan inte aktiveras utan det. Lägg till numret på "
             "kunden i Spiris först — ingen ändring har gjorts."
         )
+
+
+
+_UTKASTSLAG: dict[str, str] = {
+    "verifikat": "/voucherdrafts",
+    "kundfaktura": "/customerinvoicedrafts",
+    "leverantorsfaktura": "/supplierinvoicedrafts",
+}
+
+_UTKASTANDRING: dict[str, tuple[str, dict[str, str]]] = {
+    "verifikat": ("/voucherdrafts", {
+        "datum": "VoucherDate",
+        "text": "VoucherText",
+        "serie": "NumberSeries",
+        "rader": "Rows"
+    })
+}
+
+def bygg_utkastuppdatering(
+    nuvarande: dict, andringar: dict, objekttyp: str
+) -> dict:
+    """Lägger ändringarna ovanpå det NUVARANDE objektet och returnerar hela
+    objektet, redo för PUT. Ren funktion, ingen I/O.
+    Fail-closed på en nyckel som inte står i ändringsallowlisten.
+    Returnerar hela objektet just för att PUT nollar det som utelämnas."""
+    if objekttyp not in _UTKASTANDRING:
+        giltiga = ", ".join(repr(t) for t in _UTKASTANDRING)
+        raise SpirisKlientFel(
+            f"Okänd utkasttyp: {objekttyp!r}. Giltiga är: {giltiga}."
+        )
+    _, allowlist = _UTKASTANDRING[objekttyp]
+    if not andringar:
+        raise ValueError("Inga ändringar angivna.")
+
+    okanda = [nyckel for nyckel in andringar if nyckel not in allowlist]
+    if okanda:
+        giltiga = ", ".join(sorted(allowlist))
+        raise SpirisKlientFel(
+            f"Följande går inte att ändra på ett {objekttyp}utkast: "
+            f"{sorted(okanda)}. Ändringsbara fält: {giltiga}."
+        )
+
+    uppdaterat = dict(nuvarande)
+    for nyckel, varde in andringar.items():
+        uppdaterat[allowlist[nyckel]] = varde
+    return uppdaterat
+
+
+def andra_utkast(
+    klient: _Spirisklient, typ: str, id: str, andringar: dict
+) -> dict:
+    """Läser utkastet, lägger på ändringarna och skriver tillbaka HELA
+    utkastet."""
+    if typ not in _UTKASTANDRING:
+        giltiga = ", ".join(repr(t) for t in _UTKASTANDRING)
+        raise SpirisKlientFel(f"Okänd utkasttyp: {typ!r}. Giltiga är: {giltiga}.")
+    
+    prefix, _ = _UTKASTANDRING[typ]
+    nuvarande = klient.hamta_en(f"{prefix}/{id}")
+    uppdaterat = bygg_utkastuppdatering(nuvarande, andringar, typ)
+    try:
+        svar = klient.uppdatera(f"{prefix}/{id}", uppdaterat)
+    except SpirisKlientFel:
+        _logger.error("Kunde inte uppdatera utkast %s (Id=%s).", typ, id)
+        raise
+    _logger.info(
+        "Utkast uppdaterat: %s (Id=%s, fält=%s).",
+        typ, id, sorted(andringar)
+    )
+    return svar
+
+
+def ta_bort_utkast(klient: _Spirisklient, typ: str, id: str) -> None:
+    """Tar bort ett utkast. Oåterkallelig DELETE."""
+    if typ not in _UTKASTSLAG:
+        giltiga = ", ".join(repr(t) for t in _UTKASTSLAG)
+        raise SpirisKlientFel(f"Okänd utkasttyp: {typ!r}. Giltiga är: {giltiga}.")
+    
+    prefix = _UTKASTSLAG[typ]
+    try:
+        klient.ta_bort(f"{prefix}/{id}")
+    except SpirisKlientFel:
+        _logger.error("Kunde inte ta bort utkast %s (Id=%s).", typ, id)
+        raise
+    _logger.info("Utkast borttaget: %s (Id=%s).", typ, id)
+
+
+def bokfor_utkast(klient: _Spirisklient, typ: str, id: str) -> dict:
+    """Konverterar ett utkast till en bokförd post. Oåterkalleligt."""
+    if typ not in _UTKASTSLAG:
+        giltiga = ", ".join(repr(t) for t in _UTKASTSLAG)
+        raise SpirisKlientFel(f"Okänd utkasttyp: {typ!r}. Giltiga är: {giltiga}.")
+    
+    prefix = _UTKASTSLAG[typ]
+    try:
+        # Konvertering görs alltid med POST och tom kropp, per specen U2.3.
+        svar = klient.skicka(f"{prefix}/{id}/convert", None)
+    except SpirisKlientFel:
+        _logger.error("Kunde inte bokföra utkast %s (Id=%s).", typ, id)
+        raise
+    _logger.info("Utkast bokfört: %s (Id=%s).", typ, id)
 
 
 def andra_masterdata(
@@ -2912,3 +3036,219 @@ def hamta_granskad_mottagare(
         return hamta_efakturagranskning(klient, nyttolast["fakturanummer"])["mottagare"]
     raise SpirisKlientFel(f"Typen {typ!r} är inte utåtriktad och har ingen mottagare.")
 
+def hamta_kontoplan_alla(klient: _Spirisklient) -> list[dict]:
+    """Kontoplan över alla räkenskapsår (GET /accounts)."""
+    rader: list[dict] = []
+    for rå in klient.hamta_alla("/accounts"):
+        rader.append(
+            {
+                "kontonr": str(rå["Number"]),
+                "kontonamn": str(rå["Name"]),
+                "rakenskapsar_id": str(rå["FiscalYearId"]),
+                "aktiv": bool(rå["IsActive"]),
+                "kontotyp": spiris_typ_till_ktyp(rå.get("Type")),
+                "kontotypstext": rå.get("TypeDescription"),
+                "momskod_id": rå.get("VatCodeId"),
+                "sparrat_for_manuell_bokning": bool(rå.get("IsBlockedForManualBooking", False)),
+                "projekt_tillatet": bool(rå.get("IsProjectAllowed", False)),
+                "kostnadsstalle_tillatet": bool(rå.get("IsCostCenterAllowed", False)),
+            }
+        )
+    return rader
+def hamta_verifikationer_alla(
+    klient: _Spirisklient, fran_datum: str | None = None, till_datum: str | None = None
+) -> list[dict]:
+    """Hämtar alla verifikationer över alla räkenskapsår med datumfiltrering."""
+    filter_delar = []
+    if fran_datum:
+        filter_delar.append(f"VoucherDate ge {fran_datum}T00:00:00.00Z")
+    if till_datum:
+        filter_delar.append(f"VoucherDate le {till_datum}T23:59:59.00Z")
+    
+    kwargs = {}
+    if filter_delar:
+        kwargs["filter"] = " and ".join(filter_delar)
+        
+    rader: list[dict] = []
+    for rå in klient.hamta_alla("/vouchers", **kwargs):
+        transaktioner = [mappa_transaktion(r) for r in rå.get("Rows", [])]
+        rader.append(
+            {
+                "datum": rå["VoucherDate"][:10],
+                "text": rå.get("VoucherText"),
+                "rader": [
+                    {
+                        "kontonr": t.kontonr,
+                        "belopp": t.belopp,
+                        "transtext": t.transtext,
+                    }
+                    for t in transaktioner
+                ],
+                "id": rå.get("Id"),
+                "nummer": rå.get("NumberAndNumberSeries"),
+                "serie": rå.get("NumberSeries"),
+                "verifikationstyp": rå.get("VoucherType"),
+                "andrad": rå.get("ModifiedUtc"),
+            }
+        )
+    return rader
+
+
+def mappa_periodisering(p: dict) -> dict:
+    if not p:
+        return {}
+    mappad = {
+        "id": p.get("Id"),
+        "bokforingsdatum": p.get("BookkeepingDate"),
+        "belopp": Decimal(str(p.get("Amount", 0))),
+        "ar_kredit": p.get("IsCredit"),
+        "debetkonto": p.get("DebitAccountNumber"),
+        "kreditkonto": p.get("CreditAccountNumber"),
+        "beskrivning": p.get("Description"),
+        "status": p.get("Status"),
+        "kalldatum": p.get("SourceDate"),
+        "verifikationsnummer": p.get("NumberAndNumberSeries"),
+        "kalltyp": p.get("AllocationPeriodSourceType"),
+        "projekt_id": p.get("ProjectId"),
+        "verifikat_id": p.get("VoucherId"),
+        "leverantorsfaktura_id": p.get("SupplierInvoiceId"),
+        "kundfaktura_id": p.get("CustomerInvoiceId"),
+    }
+    # U3.1 säger att Rows -> rader (REQ), så de måste mappas.
+    # AllocationPeriodRowApi har ingen spec given i U3.1 men vi kan anta att det har några fält
+    # U3.1 säger: "Radnummerfälten (*Row), CostCenterItemId1-3, VoucherFiscalYearId,
+    # utkast-id:na och CreatedUtc/ModifiedUtc tas inte med."
+    if "Rows" in p:
+        rader = []
+        for r in p["Rows"]:
+            rad_mappad = {
+                "id": r.get("Id"),
+                "bokforingsdatum": r.get("BookkeepingDate"),
+                "belopp": Decimal(str(r.get("Amount", 0)))
+            }
+            # Filtrera None
+            rader.append({k: v for k, v in rad_mappad.items() if v is not None})
+        mappad["rader"] = rader
+
+    return {k: v for k, v in mappad.items() if v is not None}
+
+def hamta_periodiseringar(klient: _Spirisklient) -> list[dict]:
+    return [mappa_periodisering(p) for p in klient.hamta_alla("/allocationperiods")]
+
+
+def hamta_ingaende_balans(klient: _Spirisklient) -> list[dict]:
+    """Ingående balanser."""
+    rader: list[dict] = []
+    for rå in klient.hamta_alla("/fiscalyears/openingbalances"):
+        rader.append(
+            {
+                "kontonr": str(rå["Number"]),
+                "kontonamn": rå.get("Name", ""),
+                "saldo": rå["Balance"],
+            }
+        )
+    return rader
+_ENKELUPPSLAG: dict[str, str] = {
+    "kundfaktura":            "/customerinvoices",
+    "leverantorsfaktura":     "/supplierinvoices",
+    "order":                  "/orders",
+    "offert":                 "/quotes",
+    "kund":                   "/customers",
+    "leverantor":             "/suppliers",
+    "artikel":                "/articles",
+    "projekt":                "/projects",
+    "momsrapport":            "/vatreports",
+    "verifikatutkast":        "/voucherdrafts",
+    "kundfakturautkast":      "/customerinvoicedrafts",
+    "leverantorsfakturautkast": "/supplierinvoicedrafts",
+    "periodiseringar":        "/allocationperiods",
+}
+
+class _EnkelKlient:
+    def __init__(self, rå: dict):
+        self.rå = rå
+    def hamta_alla(self, path: str, **kwargs) -> list[dict]:
+        return [self.rå]
+
+def hamta_ett(klient: _Spirisklient, typ: str, objekt_id: str) -> dict:
+    """Rått enkeluppslag för djupfelsökning."""
+    if not objekt_id or not objekt_id.strip():
+        raise ValueError("objekt_id får inte vara tomt")
+    if typ not in _ENKELUPPSLAG:
+        raise ValueError(f"okänd typ: {typ}")
+    
+    rå = klient.hamta_en(f"{_ENKELUPPSLAG[typ]}/{objekt_id}")
+    fk = _EnkelKlient(rå)
+    
+    if typ == "kundfaktura": return hamta_kundfakturor(fk)[0]
+    if typ == "leverantorsfaktura": return hamta_leverantorsfakturor(fk)[0]
+    if typ == "order": return hamta_order(fk)[0]
+    if typ == "offert": return hamta_offerter(fk)[0]
+    if typ == "kund": return hamta_kunder(fk)[0]
+    if typ == "leverantor": return hamta_leverantorer(fk)[0]
+    if typ == "artikel": return hamta_artiklar(fk)[0]
+    if typ == "projekt": return hamta_projekt(fk)[0]
+    if typ == "momsrapport": return hamta_momsrapporter(fk)[0]
+    if typ == "verifikatutkast": return {"verifikat": mappa_verifikatutkast(rå)}
+    if typ in ("kundfakturautkast", "leverantorsfakturautkast"): return rå
+    if typ == "periodiseringar": return {"periodisering": mappa_periodisering(rå)}
+    return rå
+def hamta_valutakurs(klient: _Spirisklient, datum: str, fran_valuta: str, till_valuta: str) -> dict:
+    rå = klient.hamta_en("/currencies/exchangerate", params={"date": datum, "sourceCurrency": fran_valuta, "targetCurrency": till_valuta})
+    return {
+        "datum": rå.get("Date"),
+        "fran_valuta": rå.get("SourceCurrency"),
+        "till_valuta": rå.get("TargetCurrency"),
+        "kurs": rå.get("Rate"),
+    }
+
+def hamta_anlaggningstillgangar(klient: _Spirisklient) -> list[dict]:
+    etikett = skapa_kontonamnsmaskerare(las_namnreferens())
+    rader = []
+    for rå in klient.hamta_alla("/inventoryitems"):
+        rader.append({
+            "nummer": rå.get("Number"),
+            "benamning": etikett(rå.get("Name") or ""),
+            "anskaffningsvarde": rå.get("PurchasePrice"),
+            "anskaffningsdatum": str(rå.get("PurchaseDate"))[:10] if rå.get("PurchaseDate") else None,
+            "bokfort_varde": rå.get("CurrentValue"),
+            "restvarde": rå.get("ResidualValue"),
+            "livslangd_manader": rå.get("LifeSpanInMonths"),
+            "senaste_avskrivning": str(rå.get("LatestDepreciationDate"))[:10] if rå.get("LatestDepreciationDate") else None,
+            "status": rå.get("InventoryItemStatus"),
+        })
+    return rader
+
+def hamta_kundreskontraposter(klient: _Spirisklient) -> list[dict]:
+    rader = []
+    for rå in klient.hamta_alla("/customerledgeritems"):
+        rader.append({
+            "kund_id": rå.get("CustomerId"),
+            "fakturanr": rå.get("InvoiceNumber"),
+            "fakturadatum": str(rå.get("InvoiceDate"))[:10] if rå.get("InvoiceDate") else None,
+            "forfallodatum": str(rå.get("DueDate"))[:10] if rå.get("DueDate") else None,
+            "belopp": rå.get("TotalAmountInvoiceCurrency"),
+            "kvarvarande": rå.get("RemainingAmountInvoiceCurrency"),
+            "ar_kredit": bool(rå.get("IsCreditInvoice", False)),
+            "valuta": rå.get("CurrencyCode"),
+            "verifikat_id": rå.get("VoucherId"),
+            "id": rå.get("Id"),
+            "betalreferens": rå.get("PaymentReferenceNumber"),
+        })
+    return rader
+
+def hamta_anvandare(klient: _Spirisklient) -> list[dict]:
+    vakt = _bygg_namnvakt()
+    rader = []
+    for rå in klient.hamta_alla("/users"):
+        namn = f"{rå.get('FirstName', '')} {rå.get('LastName', '')}".strip()
+        visat, _ = _motpartsnamn(namn, "", False, vakt)
+        rader.append({
+            "id": rå.get("Id"),
+            "namn": visat,
+            "aktiv": bool(rå.get("IsActive", False)),
+            "ar_konsult": bool(rå.get("IsConsultant", False)),
+            "far_attestera_leverantorsfakturor": bool(rå.get("HasPurchaseInvoicesApprovalPermission", False)),
+            "far_attestera_momsrapporter": bool(rå.get("HasVATReportsApprovalPermission", False)),
+        })
+    return rader

@@ -71,10 +71,15 @@ class _FejkSpiris:
     def _svara(spec) -> httpx.Response:
         if isinstance(spec, Exception):
             raise spec
-        status, kropp = spec
+        if len(spec) == 2:
+            status, kropp = spec
+            headers = {}
+        else:
+            status, kropp, headers = spec
+            
         if isinstance(kropp, str):
-            return httpx.Response(status, text=kropp)
-        return httpx.Response(status, text=json.dumps(kropp))
+            return httpx.Response(status, headers=headers, text=kropp)
+        return httpx.Response(status, headers=headers, text=json.dumps(kropp))
 
 
 def _klient(fejk: _FejkSpiris, access_token: str = "AT1") -> SpirisKlient:
@@ -502,3 +507,143 @@ class TestVerbHygien:
         _klient(fejk).ta_bort("/customers/kund-id-1")
 
         assert "Content-Type" not in fejk.api_anrop[0].headers
+
+
+class TestHamtaAllaFiltrering:
+    def test_filter_hamnar_ratt(self):
+        fejk = _FejkSpiris(api_svar=[(200, _sida([], 1, 1))])
+        _klient(fejk).hamta_alla("/p", filter="Num eq 1")
+        assert fejk.api_anrop[0].url.params["$filter"] == "Num eq 1"
+
+    def test_select_fogas_ihop_med_komma(self):
+        fejk = _FejkSpiris(api_svar=[(200, _sida([], 1, 1))])
+        _klient(fejk).hamta_alla("/p", select=["A", "B"])
+        assert fejk.api_anrop[0].url.params["$select"] == "A,B"
+
+    def test_orderby_hamnar_ratt(self):
+        fejk = _FejkSpiris(api_svar=[(200, _sida([], 1, 1))])
+        _klient(fejk).hamta_alla("/p", orderby="Name")
+        assert fejk.api_anrop[0].url.params["$orderby"] == "Name"
+
+    def test_pagesize_hamnar_ratt(self):
+        fejk = _FejkSpiris(api_svar=[(200, _sida([], 1, 1))])
+        _klient(fejk).hamta_alla("/p", pagesize=100)
+        assert fejk.api_anrop[0].url.params["$pagesize"] == "100"
+
+    def test_alla_fyra_kombineras(self):
+        fejk = _FejkSpiris(api_svar=[(200, _sida([], 1, 1))])
+        _klient(fejk).hamta_alla("/p", filter="A", select=["B"], orderby="C", pagesize=10)
+        params = fejk.api_anrop[0].url.params
+        assert params["$filter"] == "A"
+        assert params["$select"] == "B"
+        assert params["$orderby"] == "C"
+        assert params["$pagesize"] == "10"
+
+    def test_utelamnade_parametrar_ger_samma_som_idag(self):
+        fejk = _FejkSpiris(api_svar=[(200, _sida([], 1, 1))])
+        _klient(fejk).hamta_alla("/p")
+        assert str(fejk.api_anrop[0].url).endswith("%24page=1")
+
+    def test_pagesize_0_ger_valueerror(self):
+        with pytest.raises(ValueError):
+            _klient(_FejkSpiris([])).hamta_alla("/p", pagesize=0)
+
+    def test_pagesize_1001_ger_valueerror(self):
+        with pytest.raises(ValueError):
+            _klient(_FejkSpiris([])).hamta_alla("/p", pagesize=1001)
+
+    def test_tomt_filter_ger_valueerror(self):
+        with pytest.raises(ValueError):
+            _klient(_FejkSpiris([])).hamta_alla("/p", filter="   ")
+
+    def test_krock_med_params_ger_valueerror(self):
+        with pytest.raises(ValueError):
+            _klient(_FejkSpiris([])).hamta_alla("/p", params={"$filter": "A"}, filter="B")
+
+
+class TestRateLimit:
+    def test_429_med_retry_efter_ger_omtag_och_lyckas(self, monkeypatch):
+        sov_anropades = []
+        monkeypatch.setattr("spiris_klient._sov", lambda x: sov_anropades.append(x))
+        fejk = _FejkSpiris(api_svar=[
+            (429, {"DeveloperErrorMessage": "Wait"}, {"Retry-After": "2"}),
+            (200, _sida([{"Id": "a"}], 1, 1))
+        ])
+        data = _klient(fejk).hamta_alla("/p")
+        assert len(data) == 1
+        assert sov_anropades == [2]
+        assert len(fejk.api_anrop) == 2
+
+    def test_429_utan_huvud_ger_inget_omtag(self, monkeypatch):
+        sov_anropades = []
+        monkeypatch.setattr("spiris_klient._sov", lambda x: sov_anropades.append(x))
+        fejk = _FejkSpiris(api_svar=[(429, {"DeveloperErrorMessage": "No header"})])
+        with pytest.raises(SpirisKlientFel) as exc:
+            _klient(fejk).hamta_alla("/p")
+        assert not sov_anropades
+        assert "No header" in str(exc.value)
+
+    def test_429_retry_after_over_60_ger_inget_omtag(self, monkeypatch):
+        sov_anropades = []
+        monkeypatch.setattr("spiris_klient._sov", lambda x: sov_anropades.append(x))
+        fejk = _FejkSpiris(api_svar=[(429, {"DeveloperErrorMessage": "Too long"}, {"Retry-After": "120"})])
+        with pytest.raises(SpirisKlientFel):
+            _klient(fejk).hamta_alla("/p")
+        assert not sov_anropades
+
+    def test_developer_error_message_finns_med_i_felet(self):
+        fejk = _FejkSpiris(api_svar=[(429, {"DeveloperErrorMessage": "Super specific error"})])
+        with pytest.raises(SpirisKlientFel) as exc:
+            _klient(fejk).hamta_alla("/p")
+        assert "Super specific error" in str(exc.value)
+
+    def test_tva_429_i_rad_ger_fel(self, monkeypatch):
+        monkeypatch.setattr("spiris_klient._sov", lambda x: None)
+        fejk = _FejkSpiris(api_svar=[
+            (429, {}, {"Retry-After": "1"}),
+            (429, {}, {"Retry-After": "1"})
+        ])
+        with pytest.raises(SpirisKlientFel):
+            _klient(fejk).hamta_alla("/p")
+        assert len(fejk.api_anrop) == 2
+
+    def test_somnfunktionen_anropas_med_ratt_sekunder(self, monkeypatch):
+        s = []
+        monkeypatch.setattr("spiris_klient._sov", lambda x: s.append(x))
+        fejk = _FejkSpiris(api_svar=[
+            (429, {}, {"Retry-After": "42"}),
+            (200, _sida([], 1, 1))
+        ])
+        _klient(fejk).hamta_alla("/p")
+        assert s == [42]
+
+
+class TestBinarHamtning:
+    def test_lyckad_hamtning_ger_bytes_och_content_type(self):
+        fejk = _FejkSpiris(api_svar=[(200, "BINARY DATA", {"Content-Type": "application/pdf"})])
+        innehall, ctype = _klient(fejk).hamta_binart("/pdf")
+        assert innehall == b"BINARY DATA"
+        assert ctype == "application/pdf"
+
+    def test_401_ger_refresh_och_omtag(self):
+        fejk = _FejkSpiris(
+            api_svar=[
+                (401, {"ErrorCode": 9000}),
+                (200, "OK", {"Content-Type": "image/png"})
+            ],
+            token_svar=_TOKENSVAR_OK,
+        )
+        innehall, ctype = _klient(fejk).hamta_binart("/img")
+        assert innehall == b"OK"
+        assert ctype == "image/png"
+        assert len(fejk.token_anrop) == 1
+
+    def test_http_fel_ger_spirisklientfel(self):
+        fejk = _FejkSpiris(api_svar=[(404, {"error": "not found"})])
+        with pytest.raises(SpirisKlientFel):
+            _klient(fejk).hamta_binart("/pdf")
+
+    def test_natverksfel_ger_spirisklientfel(self):
+        fejk = _FejkSpiris(api_svar=[httpx.ConnectError("nere")])
+        with pytest.raises(SpirisKlientFel):
+            _klient(fejk).hamta_binart("/pdf")

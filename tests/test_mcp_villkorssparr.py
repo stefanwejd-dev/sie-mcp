@@ -53,6 +53,15 @@ from mcp_server.server import (
     spiris_resultatrapport,
     spiris_sok_verifikationer,
     visa_anvandarvillkor,
+    spiris_hamta_ett,
+    spiris_ingaende_balans,
+    spiris_kontoplan_alla,
+    spiris_kundfakturor,
+    spiris_verifikationer_alla,
+    spiris_valutakurs,
+    spiris_anlaggningstillgangar,
+    spiris_kundreskontraposter,
+    spiris_anvandare,
 )
 
 FILVERKTYG = [berakna_vasentlighet, granska_kontotyper]
@@ -94,6 +103,16 @@ SPIRIS_ARGUMENT: dict[str, tuple] = {
     "spiris_avstamningslage": (),
     "spiris_verifikatutkast": (),
     "spiris_sie4export": ("2026-01-01", "2026-12-31"),
+    "spiris_hamta_ett": ("kund", "123"),
+    "spiris_ingaende_balans": (),
+    "spiris_kontoplan_alla": (),
+    "spiris_kundfakturor": (),
+    "spiris_verifikationer_alla": (),
+    "spiris_valutakurs": ("2026-01-01", "SEK", "EUR"),
+    "spiris_anlaggningstillgangar": (),
+    "spiris_kundreskontraposter": (),
+    "spiris_anvandare": (),
+    "spiris_periodiseringar": (),
 }
 
 _SPIRISFUNKTIONER = {
@@ -111,6 +130,7 @@ _SPIRISFUNKTIONER = {
     "spiris_leverantorsfakturor": spiris_leverantorsfakturor,
     "spiris_order": spiris_order,
     "spiris_offerter": spiris_offerter,
+    "spiris_periodiseringar": server_modul.spiris_periodiseringar,
     "spiris_bankkonton": spiris_bankkonton,
     "spiris_momskoder": spiris_momskoder,
     "spiris_momsrapporter": spiris_momsrapporter,
@@ -129,6 +149,15 @@ _SPIRISFUNKTIONER = {
     "spiris_avstamningslage": spiris_avstamningslage,
     "spiris_verifikatutkast": spiris_verifikatutkast,
     "spiris_sie4export": spiris_sie4export,
+    "spiris_hamta_ett": spiris_hamta_ett,
+    "spiris_ingaende_balans": spiris_ingaende_balans,
+    "spiris_kontoplan_alla": spiris_kontoplan_alla,
+    "spiris_kundfakturor": spiris_kundfakturor,
+    "spiris_verifikationer_alla": spiris_verifikationer_alla,
+    "spiris_valutakurs": spiris_valutakurs,
+    "spiris_anlaggningstillgangar": spiris_anlaggningstillgangar,
+    "spiris_kundreskontraposter": spiris_kundreskontraposter,
+    "spiris_anvandare": spiris_anvandare,
 }
 
 SPIRISVERKTYG = [
@@ -265,7 +294,7 @@ def test_alla_registrerade_verktyg_har_ett_sparrtest():
         "likviditetsprognos", "kunder", "leverantorer", "projekt",
         "kostnadsstallen", "kontosaldo", "referensdata", "bankhandelser",
         "avstamningslage",
-    }
+        "hamta_ett", "ingaende_balans", "kontoplan_alla", "kundfakturor", "verifikationer_alla", "valutakurs", "anlaggningstillgangar", "kundreskontraposter", "anvandare", "periodiseringar"}
     tackta = (
         set(SPIRIS_ARGUMENT)
         | {"berakna_vasentlighet", "granska_kontotyper"}
@@ -279,6 +308,8 @@ def test_alla_registrerade_verktyg_har_ett_sparrtest():
         | {"forbered_leverantorsfakturautkast", "forbered_attest",
            "forbered_leverantorsbetalning"}
         | {"forbered_masterdataandring", "forbered_masterdataborttagning"}
+        | {"forbered_utkastandring", "forbered_utkastborttagning", "forbered_utkastbokforing"}
+        | {"forbered_periodisering"}
         | {"forbered_sie4import"}
         | {"visa_anvandarvillkor"}
         | alias_verktyg
