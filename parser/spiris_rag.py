@@ -890,3 +890,62 @@ async def hamta_kvittningskandidater(klient, faktura_id: str) -> dict:
     ]
     from parser.spiris_rag import _envelope
     return _envelope(res, antal_exkluderade=0)
+
+def hamta_prislistor(k, prislista_id: str | None = None) -> list[dict]:
+    """U16.1 — spiris_prislistor"""
+    if not prislista_id:
+        rader = k.hamta_alla("/salespricelists")
+        res = []
+        for r in rader:
+            res.append({
+                "Id": r.get("Id"),
+                "Name": r.get("Name"),
+                "Number": r.get("Number"),
+                "CurrencyCode": r.get("CurrencyCode"),
+                "IsStandard": r.get("IsStandard"),
+                "IsActive": r.get("IsActive"),
+            })
+        return res
+    else:
+        rader = k.hamta_alla(f"/salespricelists/prices/{prislista_id}")
+        res = []
+        for r in rader:
+            res.append({
+                "SalesPriceListId": r.get("SalesPriceListId"),
+                "ArticleId": r.get("ArticleId"),
+                "NetPrice": str(r.get("NetPrice")) if r.get("NetPrice") is not None else None,
+                "GrossPrice": str(r.get("GrossPrice")) if r.get("GrossPrice") is not None else None,
+                "CurrencyCode": r.get("CurrencyCode"),
+            })
+        return res
+
+
+def hamta_rabattavtal(k) -> list[dict]:
+    """U16.2 — spiris_rabattavtal"""
+    rader = k.hamta_alla("/discountagreements")
+    res = []
+    for r in rader:
+        res.append({
+            "Id": r.get("Id"),
+            "Name": r.get("Name"),
+            "Number": r.get("Number"),
+            "IsActive": r.get("IsActive"),
+        })
+    return res
+
+
+def hamta_etiketter(k, typ: str) -> list[dict]:
+    """U16.3 — spiris_etiketter"""
+    if typ not in ("kund", "artikel"):
+        raise ValueError(f"Okänd etiketttyp: {typ}. Måste vara 'kund' eller 'artikel'.")
+        
+    ep = "/customerlabels" if typ == "kund" else "/articlelabels"
+    rader = k.hamta_alla(ep)
+    res = []
+    for r in rader:
+        res.append({
+            "Id": r.get("Id"),
+            "Name": r.get("Name"),
+            "Description": r.get("Description"),
+        })
+    return res

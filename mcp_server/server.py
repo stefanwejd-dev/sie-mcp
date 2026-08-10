@@ -3296,3 +3296,29 @@ async def forbered_rotrut(
         "Förslag: Ändra ROT/RUT-inställningar",
         sammanfattning,
     )
+
+
+@mcp.tool()
+async def spiris_prislistor(prislista_id: str | None = None) -> dict:
+    """Hämtar prislistor (KATEGORI_STRUKTUR).
+    
+    Om prislista_id inte anges returneras alla upplagda prislistor.
+    Om prislista_id anges (från Id-fältet i en prislista) returneras alla artikelpriser i den listan.
+    """
+    return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_prislistor(k, prislista_id), KATEGORI_STRUKTUR)
+
+
+@mcp.tool()
+async def spiris_rabattavtal() -> dict:
+    """Hämtar rabattavtal (KATEGORI_STRUKTUR)."""
+    return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_rabattavtal(k), KATEGORI_STRUKTUR)
+
+
+@mcp.tool()
+async def spiris_etiketter(typ: str) -> dict:
+    """Hämtar etiketter för antingen kunder eller artiklar (KATEGORI_STRUKTUR).
+    
+    Args:
+        typ: Måste vara antingen "kund" eller "artikel".
+    """
+    return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_etiketter(k, typ), KATEGORI_STRUKTUR)

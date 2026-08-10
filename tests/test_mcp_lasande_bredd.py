@@ -78,6 +78,7 @@ from mcp_server.server import (
     spiris_underlag,
     spiris_hamta_underlag, spiris_offertutkast, spiris_bokforingslas,
     spiris_kvittningskandidater,
+    spiris_prislistor, spiris_rabattavtal, spiris_etiketter,
 )
 
 _COMPANY = {"Name": "Testbolag AB", "CorporateIdentityNumber": "556677-8899",
@@ -219,6 +220,12 @@ class _FejkKlient:
             return _CUSTOMER_INVOICES
         if path == "/fiscalyears/openingbalances":
             return _OPENING_BALANCES
+        if path.startswith("/salespricelists"):
+            return [{"Id": "123", "Name": "Lista"}]
+        if path == "/discountagreements":
+            return [{"Id": "123", "Name": "Avtal"}]
+        if path in ("/customerlabels", "/articlelabels"):
+            return [{"Id": "123", "Name": "Etikett"}]
         raise AssertionError(f"oväntad hamta_alla: {path}")
 
 
@@ -285,6 +292,9 @@ ALLA_SPIRISVERKTYG = {
     "spiris_hamta_underlag": lambda: spiris_hamta_underlag("123"),
     "spiris_offertutkast": lambda: spiris_offertutkast(),
     "spiris_bokforingslas": lambda: spiris_bokforingslas(),
+    "spiris_prislistor": lambda: spiris_prislistor(),
+    "spiris_rabattavtal": lambda: spiris_rabattavtal(),
+    "spiris_etiketter": lambda: spiris_etiketter("kund"),
 }
 
 

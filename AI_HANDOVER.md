@@ -68,3 +68,5 @@ Utöver detta tillkom ett beslut som inte fanns i listan: **D3**, att belopp kor
 3. Börja med Etapp 8 (rättningarna). Bygg ingen ny funktion ovanpå en trasig skrivväg.
 4. Kör inte R8.7 eller Etapp 15b innan GRIND 10 är körd: `python tools/prov_grind10.py --bolag "<bolagsnamn>" --offset`.
 5. Behåll strikt disciplin gällande data masking och `Decimal`.
+
+- **Senaste uppdatering**: Etapp 16 (prislistor, rabattavtal och etiketter) är fullt implementerad, testad och integrerad.

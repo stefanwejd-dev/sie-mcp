@@ -75,6 +75,10 @@ FILVERKTYG = [berakna_vasentlighet, granska_kontotyper]
 # spärrtest — och därmed i praktiken vara oskyddat.
 SPIRIS_ARGUMENT: dict[str, tuple] = {
     "spiris_offertutkast": (),
+    "spiris_prislistor": (),
+    "spiris_rabattavtal": (),
+    "spiris_etiketter": ("kund",),
+
     "spiris_bokforingslas": (),
     "spiris_kontosaldon": ("ar-1", "2026-06-30"),
     "spiris_kontotransaktioner": ("ar-1", "1930"),
@@ -173,6 +177,10 @@ _SPIRISFUNKTIONER = {
     "spiris_kvittningskandidater": spiris_kvittningskandidater,
     "spiris_hamta_underlag": spiris_hamta_underlag,
     "spiris_offertutkast": spiris_offertutkast,
+    "spiris_prislistor": server_modul.spiris_prislistor,
+    "spiris_rabattavtal": server_modul.spiris_rabattavtal,
+    "spiris_etiketter": server_modul.spiris_etiketter,
+
     "spiris_bokforingslas": spiris_bokforingslas,
 }
 

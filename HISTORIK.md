@@ -175,3 +175,13 @@ utvecklaren.
     *   **R8.6**: Bekräftat att dökodstester är raderade och inte längre körs mot de borttagna raderna i adaptern.
     *   **R8.7 (GRIND 10)**: Utfört GRIND 10 i sandboxen. Provet visade att specifikationen återigen **har fel**! Endpointen `POST /voucherwithoverunderpayment` FINNS faktiskt för svenska bolag (ger 400 Bad Request på tom kropp, inte 404/501). Funktionen `forbered_betalningsverifikat` är därmed INTE dödfödd och ska **inte** raderas.
 *   **Resultat**: 2238/2238 tester gröna. Maskeringsgränsen (Lagergräns 5) intakt.
+
+### 2026-08-10 (Etapp 16 - Prislistor, rabattavtal och etiketter)
+*   **Status**: IMPLEMENTERAT & TESTAT.
+*   **Ändringar**:
+    *   **R16.1**: Implementerat `spiris_prislistor` med stöd för hämtning av alla prislistor (GET `/salespricelists`) eller priser för specifik lista (GET `/salespricelists/prices/{id}`).
+    *   **R16.2**: Implementerat `spiris_rabattavtal` för läsning av rabattavtal (GET `/discountagreements`).
+    *   **R16.3**: Implementerat `spiris_etiketter` som stöder typ-argumentet ("kund" eller "artikel") och anropar antingen `/customerlabels` eller `/articlelabels`.
+    *   **R16.4**: Lagt till verktygen i MCP-servern (`mcp_server/server.py`) bakom `_kor_spiris_verktyg` så att de skyddas av användargodkännande.
+    *   **R16.5**: Uppdaterat testsviterna (`test_mcp_lasande_bredd.py` och `test_mcp_villkorssparr.py`) och skapat separata tester i `test_etapp16_strukturer.py`.
+*   **Resultat**: 206/206 tester gröna.
