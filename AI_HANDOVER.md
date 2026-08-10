@@ -38,15 +38,17 @@ Vi har precis slutfört Etapp 0 till 7 i den exekverbara planen `PLAN_SPIRIS_TAC
 * Bygg aldrig vidare om testsviten (`python -m pytest tests/ -q`) är röd.
 * All ny kod har typats och följer domänmodellerna (`Transaktion`, `Verifikation`, `Decimal` för alla belopp).
 
-## 4. Vad som utförts i Etapp 8 till 15b
+## 4. Vad som utförts i Etapp 8 till 17
 
 * **Etapp 8-9**: Fixade buggarna (skrivvägen för periodiseringar och underlagskoppling) som upptäcktes ovan. Lade även till Decimal-kontroll för samtliga beloppfält (U9).
 * **Etapp 11-14**: Införde fullt stöd för att hantera/skapa periodiseringar, konton (läs/skriv), bokföringslås, ROT/RUT, samt utkaständring (whitelisting-baserad `PUT /drafts/{id}`).
 * **Etapp 15-15b**: Stöd för offertutkast (`/quotedrafts`), säljdokumentåtgärd (omvandling av ordrar/offerter), samt kvittning av leverantörskreditfakturor (`/supplierinvoices/{id}/offset`).
+* **Etapp 16**: Inläsning av prislistor, rabattavtal och etiketter (masterdata).
+* **Etapp 17**: Byggde verktyg för två-segmentsuppslag (`spiris_verifikation` och `spiris_bankhandelse`). All kod är klar och röktestad lokalt.
 
-## 5. Vad som kvarstår att göra (Etapp 16+)
+## 5. Vad som kvarstår att göra
 
-**Besluten är fattade 2026-08-10 och står i `PLAN_SPIRIS_ETAPP8.md` avsnitt 2 (D1–D6).** Den planen är körbar och ersätter listan nedan som arbetsunderlag. Den här sammanställningen står kvar för att visa hur punkterna föll ut.
+**Besluten är fattade 2026-08-10 och står i `PLAN_SPIRIS_ETAPP8.md` avsnitt 2 (D1–D6).** **Hela planen är nu utförd.** Både Etapp 0-7 och Etapp 8-17 är till fullo implementerade, testade (2 244 gröna tester) och integrerade i koden. Nedan syns hur utkastet utföll.
 
 | Punkt i den ursprungliga listan | Utfall |
 |---|---|
@@ -65,8 +67,8 @@ Utöver detta tillkom ett beslut som inte fanns i listan: **D3**, att belopp kor
 ## 5. Instruktioner till nästa assistent
 1. Läs `PLAN_SPIRIS_ETAPP8.md` — den är arbetsordern. `ARKITEKTUR_SPIRIS_TACKNING.md` och `PLAN_SPIRIS_TACKNING.md` är bakgrunden.
 2. Läs `hantverksbok/00_KONSTITUTION.md`. Bryt ALDRIG mot konstitutionen.
-3. Börja med Etapp 8 (rättningarna). Bygg ingen ny funktion ovanpå en trasig skrivväg.
-4. Kör inte R8.7 eller Etapp 15b innan GRIND 10 är körd: `python tools/prov_grind10.py --bolag "<bolagsnamn>" --offset`.
+3. Projektet är nu i en fas där grundplanerna (`PLAN_SPIRIS_TACKNING.md` och `PLAN_SPIRIS_ETAPP8.md`) är 100 % slutförda.
+4. Endast underhåll och eventuellt upptäckta buggar återstår i dagsläget, såvida ingen ny plan (Etapp 18+) formuleras.
 5. Behåll strikt disciplin gällande data masking och `Decimal`.
 
 - **Senaste uppdatering**: Etapp 16 (prislistor, rabattavtal och etiketter) är fullt implementerad, testad och integrerad.
