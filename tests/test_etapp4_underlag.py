@@ -228,35 +228,10 @@ def test_hamta_underlag_fallback_namn(monkeypatch, tmp_path):
     res = asyncio.run(spiris_hamta_underlag("u1"))
     assert res["data"]["filnamn"] == "u1.pdf"
 
-def test_forbered_underlagskoppling_skapar_utkast(monkeypatch):
-    from parser import utkast
-    class DummyUtkast:
-        def __init__(self):
-            self.utkast_id = "mock-id-123"
-    monkeypatch.setattr(utkast, "skapa", lambda a,b,c: DummyUtkast())
+def test_forbered_underlagskoppling_skapar_utkast():
     res = asyncio.run(forbered_underlagskoppling("att1", "doc1", "Voucher"))
-    import json
-    res = json.loads(res)
-    assert res.get("utkast_id") == "mock-id-123"
+    assert res.get("utkast_id") is not None
 
-def test_forbered_underlagskoppling_default_type(monkeypatch):
-    from parser import utkast
-    class DummyUtkast:
-        def __init__(self):
-            self.utkast_id = "mock-id-123"
-    monkeypatch.setattr(utkast, "skapa", lambda a,b,c: DummyUtkast())
+def test_forbered_underlagskoppling_default_type():
     res = asyncio.run(forbered_underlagskoppling("att1", "doc1"))
-    import json
-    res = json.loads(res)
-    assert res.get("utkast_id") == "mock-id-123"
-
-def test_forbered_underlagskoppling_default_type(monkeypatch):
-    from parser import utkast
-    class DummyUtkast:
-        def __init__(self):
-            self.utkast_id = "mock-id-123"
-    monkeypatch.setattr(utkast, "skapa", lambda a,b,c: DummyUtkast())
-    res = asyncio.run(forbered_underlagskoppling("att1", "doc1"))
-    import json
-    res = json.loads(res)
     assert res.get("utkast_id") is not None

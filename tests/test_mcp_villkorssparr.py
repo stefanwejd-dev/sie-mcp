@@ -63,7 +63,7 @@ from mcp_server.server import (
     spiris_kundreskontraposter,
     spiris_anvandare,
     spiris_underlag,
-    spiris_hamta_underlag,
+    spiris_hamta_underlag, spiris_offertutkast, spiris_bokforingslas,
     spiris_kvittningskandidater,
 )
 
@@ -74,6 +74,8 @@ FILVERKTYG = [berakna_vasentlighet, granska_kontotyper]
 # bevakningen räcker det att glömma en rad för att ett nytt verktyg ska sakna
 # spärrtest — och därmed i praktiken vara oskyddat.
 SPIRIS_ARGUMENT: dict[str, tuple] = {
+    "spiris_offertutkast": (),
+    "spiris_bokforingslas": (),
     "spiris_kontosaldon": ("ar-1", "2026-06-30"),
     "spiris_kontotransaktioner": ("ar-1", "1930"),
     "spiris_sok_verifikationer": ("ar-1", "hyra"),
@@ -119,6 +121,7 @@ SPIRIS_ARGUMENT: dict[str, tuple] = {
     "spiris_kvittningskandidater": ("123",),
     "spiris_hamta_underlag": ("123",),
     "spiris_periodiseringar": (),
+    "spiris_bokforingslas": (),
 }
 
 _SPIRISFUNKTIONER = {
@@ -137,6 +140,7 @@ _SPIRISFUNKTIONER = {
     "spiris_order": spiris_order,
     "spiris_offerter": spiris_offerter,
     "spiris_periodiseringar": server_modul.spiris_periodiseringar,
+    "spiris_bokforingslas": server_modul.spiris_bokforingslas,
     "spiris_bankkonton": spiris_bankkonton,
     "spiris_momskoder": spiris_momskoder,
     "spiris_momsrapporter": spiris_momsrapporter,
@@ -168,6 +172,8 @@ _SPIRISFUNKTIONER = {
     "spiris_kvittningskandidater": ("123",),
     "spiris_kvittningskandidater": spiris_kvittningskandidater,
     "spiris_hamta_underlag": spiris_hamta_underlag,
+    "spiris_offertutkast": spiris_offertutkast,
+    "spiris_bokforingslas": spiris_bokforingslas,
 }
 
 SPIRISVERKTYG = [
@@ -206,11 +212,11 @@ def test_utkastverktyg_sparras_utan_godkannande():
     for anrop in (
         lambda: server_modul.forbered_kund("Anna Andersson"),
         lambda: server_modul.forbered_kundfaktura(
-            "Kund AB", [{"beskrivning": "Konsult", "antal": 1, "pris": 1000}]
+            "Kund AB", [{"beskrivning": "Konsult", "antal": "1", "pris": "1000"}]
         ),
         lambda: server_modul.forbered_verifikat(
             "Test", "2026-08-04",
-            [{"konto": "1930", "debet": 100}, {"konto": "3041", "kredit": 100}],
+            [{"konto": "1930", "debet": "100"}, {"konto": "3041", "kredit": "100"}],
         ),
         # Steg 5: kundfakturans livscykelåtgärder. De två första är
         # UTÅTRIKTADE — spärren måste hålla före dem också, annars kunde ett
@@ -219,18 +225,18 @@ def test_utkastverktyg_sparras_utan_godkannande():
         lambda: server_modul.forbered_fakturautskick("101"),
         lambda: server_modul.forbered_betalningspaminnelse("101"),
         lambda: server_modul.forbered_betalningsregistrering(
-            "101", 1000.0, "2026-08-06", "bank-1"
+            "101", "1000.0", "2026-08-06", "bank-1"
         ),
         lambda: server_modul.forbered_makulering("101", "Felaktig faktura"),
         lambda: server_modul.forbered_saljdokumentutskick("offert", "5"),
         lambda: server_modul.forbered_efakturautskick("101"),
         lambda: server_modul.forbered_saljdokumentatgard("offert", "5", "godkann"),
         lambda: server_modul.forbered_leverantorsfakturautkast(
-            "lev-1", [{"konto": "4010", "debet": 100}]
+            "lev-1", [{"konto": "4010", "debet": "100"}]
         ),
         lambda: server_modul.forbered_attest("leverantorsfaktura", "L-1"),
         lambda: server_modul.forbered_leverantorsbetalning(
-            "L-1", 100.0, "2026-08-06", "bank-1"
+            "L-1", "100.0", "2026-08-06", "bank-1"
         ),
         lambda: server_modul.forbered_masterdataandring(
             "kund", "cus-1", {"namn": "Nytt AB"}
@@ -319,8 +325,8 @@ def test_alla_registrerade_verktyg_har_ett_sparrtest():
            "forbered_leverantorsbetalning"}
         | {"forbered_masterdataandring", "forbered_masterdataborttagning"}
         | {"forbered_utkastandring", "forbered_utkastborttagning", "forbered_utkastbokforing"}
-        | {"forbered_periodisering", "forbered_betalningsverifikat", "forbered_underlagskoppling"}
-        | {"forbered_sie4import"}
+        | {"forbered_periodisering", "forbered_periodiseringsandring", "forbered_periodiseringsborttagning", "forbered_betalningsverifikat", "forbered_underlagskoppling", "forbered_konto", "forbered_kontoandring", "forbered_bokforingslas", "forbered_rotrut"}
+        | {"forbered_sie4import", "forbered_offertutkast", "forbered_kvittning"}
         | {"visa_anvandarvillkor"}
         | alias_verktyg
     )
@@ -434,3 +440,12 @@ def test_ingen_mcp_vag_kan_skriva_godkannandet():
             continue
         assert "godkann_compliance" not in kalla, f"{namn} får inte godkänna villkor"
         assert "aterkalla_compliance" not in kalla, f"{namn} får inte återkalla villkor"
+
+def test_mcp_verktyg_forbered_underlagskoppling_sparrat():
+    """Låser att forbered_underlagskoppling avvisas om villkoren inte är godkända."""
+    import compliance
+    import asyncio
+    import mcp_server.server as server_modul
+    compliance._VILLKOR_GODKANDA = False
+    res = asyncio.run(server_modul.forbered_underlagskoppling("123", "456"))
+    assert compliance.SPARRTEXT_KORT in res.get("info", "")

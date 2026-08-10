@@ -54,6 +54,7 @@ from spiris_adapter import hamta_leverantorsfakturor as _adapter_levfakturor
 from spiris_adapter import hamta_momskoder as _adapter_momskoder
 from spiris_adapter import hamta_momsrapporter as _adapter_momsrapporter
 from spiris_adapter import hamta_offerter as _adapter_offerter
+from spiris_adapter import hamta_offertutkast as _adapter_offertutkast
 from spiris_adapter import hamta_order as _adapter_order
 from spiris_adapter import hamta_foretagsinfo as _adapter_foretagsinfo
 from spiris_adapter import hamta_kontoplan as _adapter_kontoplan
@@ -522,6 +523,12 @@ async def hamta_order(klient: _Spirisklient) -> dict[str, Any]:
     return _envelope(rader, antal_exkluderade=0)
 
 
+
+async def hamta_offertutkast(klient: _Spirisklient) -> dict[str, Any]:
+    """Offertutkast med allowlist."""
+    rader = await asyncio.to_thread(_adapter_offertutkast, klient)
+    return _envelope(rader, antal_exkluderade=0)
+
 async def hamta_offerter(klient: _Spirisklient) -> dict[str, Any]:
     """Offerter (/quotes). Samma fältallowlist som order."""
     rader = await asyncio.to_thread(_adapter_offerter, klient)
@@ -753,6 +760,12 @@ async def hamta_likviditetsprognos(
 
 from spiris_adapter import hamta_kontoplan_alla as _adapter_kontoplan_alla
 
+
+async def hamta_bokforingslas(klient: _Spirisklient) -> dict[str, Any]:
+    from spiris_adapter import hamta_bokforingslas as _adapter_bokforingslas
+    res = await asyncio.to_thread(_adapter_bokforingslas, klient)
+    return _envelope([res], antal_exkluderade=0)
+
 async def hamta_kontoplan_alla(klient: _Spirisklient) -> dict[str, Any]:
     """Kontoplan för alla år."""
     rader = await asyncio.to_thread(_adapter_kontoplan_alla, klient)
@@ -861,10 +874,10 @@ async def hamta_underlag_fil(klient, underlag_id: str) -> dict:
     from parser.spiris_rag import _envelope
     return _envelope(data, antal_exkluderade=0)
 
-async def hamta_kvittningskandidater(klient, faktura_id: str) -> list[dict]:
+async def hamta_kvittningskandidater(klient, faktura_id: str) -> dict:
     kandidater = await asyncio.to_thread(_adapter_kvittningskandidater, klient, faktura_id)
     maskerare = skapa_motpartsmaskerare(las_namnreferens())
-    return [
+    res = [
         {
             "faktura_id": k.get("InvoiceId") or "",
             "fakturanr": k.get("InvoiceNumber") or "",
@@ -875,3 +888,5 @@ async def hamta_kvittningskandidater(klient, faktura_id: str) -> list[dict]:
         }
         for k in kandidater
     ]
+    from parser.spiris_rag import _envelope
+    return _envelope(res, antal_exkluderade=0)

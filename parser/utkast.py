@@ -86,6 +86,7 @@ GILTIGA_TYPER = (
     "leverantorsfakturautkast",
     "attest",
     "leverantorsbetalning",
+    "kvittning",
     # Steg 7: masterdata.
     "masterdataandring",
     "masterdataborttagning",
@@ -96,6 +97,12 @@ GILTIGA_TYPER = (
     "utkastborttagning",
     "utkastbokforing",
     "periodisering",
+    "konto",
+    "kontoandring",
+    "periodiseringsandring",
+    "periodiseringsborttagning",
+    "bokforingslas",
+    "rotrut",
 )
 
 

@@ -402,7 +402,7 @@ def test_meddelandet_visar_beloppen_och_sager_att_inget_skickas():
 
     asyncio.run(server_modul.forbered_kundfaktura(
         "Kundbolaget AB",
-        [{"beskrivning": "Konsult", "antal": 10, "pris": 1500}],
+        [{"beskrivning": "Konsult", "antal": "10", "pris": "1500.00"}],
         ctx=ctx,
     ))
 
@@ -419,7 +419,7 @@ def test_obalanserat_verifikat_fragar_inte_alls():
 
     svar = asyncio.run(server_modul.forbered_verifikat(
         "Skev post", "2026-08-04",
-        [{"konto": "1930", "debet": 100}, {"konto": "3041", "kredit": 90}],
+        [{"konto": "1930", "debet": "100"}, {"konto": "3041", "kredit": "90"}],
         ctx=ctx,
     ))
 
@@ -434,7 +434,7 @@ def test_sammanfattningen_ar_densamma_tidigt_och_i_utkastet():
 
     svar = asyncio.run(server_modul.forbered_verifikat(
         "Kontant försäljning", "2026-08-04",
-        [{"konto": "1930", "debet": 1250}, {"konto": "3041", "kredit": 1250}],
+        [{"konto": "1930", "debet": "1250"}, {"konto": "3041", "kredit": "1250"}],
         ctx=ctx,
     ))
 
@@ -492,8 +492,8 @@ def test_forbered_kund_skapar_utkast_utan_att_utfora():
 def test_forbered_kundfaktura_summerar_raderna():
     svar = asyncio.run(server_modul.forbered_kundfaktura(
         "Kundbolaget AB",
-        [{"beskrivning": "Konsult", "antal": 10, "pris": 1500},
-         {"beskrivning": "Resa", "antal": 1, "pris": 500}],
+        [{"beskrivning": "Konsult", "antal": "10", "pris": "1500.00"},
+         {"beskrivning": "Resa", "antal": "1", "pris": "500.00"}],
     ))
     assert svar["utfort"] is False
     text = str(svar["sammanfattning"])
@@ -504,7 +504,7 @@ def test_forbered_verifikat_kraver_balans():
     """Ett obalanserat verifikat ska aldrig ens bli ett utkast."""
     svar = asyncio.run(server_modul.forbered_verifikat(
         "Skev post", "2026-08-04",
-        [{"konto": "1930", "debet": 100}, {"konto": "3041", "kredit": 90}],
+        [{"konto": "1930", "debet": "100"}, {"konto": "3041", "kredit": "90"}],
     ))
     assert svar["utkast_id"] is None
     assert utkast.lista(status=utkast.VANTAR) == []
@@ -513,9 +513,9 @@ def test_forbered_verifikat_kraver_balans():
 def test_forbered_verifikat_accepterar_balanserat():
     svar = asyncio.run(server_modul.forbered_verifikat(
         "Kontant försäljning", "2026-08-04",
-        [{"konto": "1930", "debet": 1250, "text": "Insättning"},
-         {"konto": "3041", "kredit": 1000},
-         {"konto": "2611", "kredit": 250}],
+        [{"konto": "1930", "debet": "1250", "text": "Insättning"},
+         {"konto": "3041", "kredit": "1000"},
+         {"konto": "2611", "kredit": "250"}],
     ))
     assert svar["utfort"] is False
     assert utkast.las(svar["utkast_id"]).typ == "verifikat"

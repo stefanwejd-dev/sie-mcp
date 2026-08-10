@@ -76,7 +76,7 @@ from mcp_server.server import (
     spiris_verifikatutkast,
     spiris_sie4export,
     spiris_underlag,
-    spiris_hamta_underlag,
+    spiris_hamta_underlag, spiris_offertutkast, spiris_bokforingslas,
     spiris_kvittningskandidater,
 )
 
@@ -283,6 +283,8 @@ ALLA_SPIRISVERKTYG = {
     "spiris_underlag": lambda: spiris_underlag(),
     "spiris_kvittningskandidater": lambda: spiris_kvittningskandidater("123"),
     "spiris_hamta_underlag": lambda: spiris_hamta_underlag("123"),
+    "spiris_offertutkast": lambda: spiris_offertutkast(),
+    "spiris_bokforingslas": lambda: spiris_bokforingslas(),
 }
 
 

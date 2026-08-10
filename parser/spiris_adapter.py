@@ -517,6 +517,84 @@ def _bygg_verifikat_payload(nyttolast: dict) -> dict:
     }
 
 
+
+def bygg_kontopayload(nyttolast: dict) -> dict:
+    payload = {
+        "Number": nyttolast["kontonr"],
+        "Name": nyttolast["kontonamn"],
+        "FiscalYearId": nyttolast["rakenskapsar_id"],
+        "IsActive": nyttolast["aktiv"],
+    }
+    if "kontotyp" in nyttolast and nyttolast["kontotyp"] is not None:
+        payload["Type"] = nyttolast["kontotyp"]
+    if "momskod_id" in nyttolast and nyttolast["momskod_id"] is not None:
+        payload["VatCodeId"] = nyttolast["momskod_id"]
+    if "projekt_tillatet" in nyttolast and nyttolast["projekt_tillatet"] is not None:
+        payload["IsProjectAllowed"] = nyttolast["projekt_tillatet"]
+    if "kostnadsstalle_tillatet" in nyttolast and nyttolast["kostnadsstalle_tillatet"] is not None:
+        payload["IsCostCenterAllowed"] = nyttolast["kostnadsstalle_tillatet"]
+    if "sparrat_for_manuell_bokning" in nyttolast and nyttolast["sparrat_for_manuell_bokning"] is not None:
+        payload["IsBlockedForManualBooking"] = nyttolast["sparrat_for_manuell_bokning"]
+    return payload
+
+_KONTO_ALLOWLIST = {
+    "kontonamn": "Name",
+    "aktiv": "IsActive",
+    "kontotyp": "Type",
+    "momskod_id": "VatCodeId",
+    "projekt_tillatet": "IsProjectAllowed",
+    "kostnadsstalle_tillatet": "IsCostCenterAllowed",
+    "sparrat_for_manuell_bokning": "IsBlockedForManualBooking"
+}
+
+def bygg_kontoandring_payload(nuvarande: dict, andringar: dict) -> dict:
+    if not andringar:
+        raise ValueError("Inga ändringar angivna.")
+
+    okanda = [nyckel for nyckel in andringar if nyckel not in _KONTO_ALLOWLIST]
+    if okanda:
+        giltiga = ", ".join(sorted(_KONTO_ALLOWLIST))
+        raise SpirisKlientFel(
+            f"Följande går inte att ändra på ett konto: "
+            f"{sorted(okanda)}. Ändringsbara fält: {giltiga}."
+        )
+
+    uppdaterat = dict(nuvarande)
+    for nyckel, varde in andringar.items():
+        uppdaterat[_KONTO_ALLOWLIST[nyckel]] = varde
+    return uppdaterat
+
+
+
+def bygg_bokforingslas_payload(nyttolast: dict) -> dict:
+    # U13.2: PUT /companysettings/accountinglocksettings
+    return {
+        "AccountingLockedAsOf": nyttolast["nytt_datum"]
+    }
+
+_ROTRUT_ALLOWLIST = {
+    "RutMaxAmountForPersBelow65Year": "RutMaxAmountForPersBelow65Year", # To itself just for mapping
+    "RutMaxAmountForPersOver65Year": "RutMaxAmountForPersOver65Year",
+    "RutReducedInvoicingPercent": "RutReducedInvoicingPercent",
+    "RotReducedInvoicingMaxAmount": "RotReducedInvoicingMaxAmount",
+    "RotReducedInvoicingPercent": "RotReducedInvoicingPercent"
+}
+
+def bygg_rotrut_payload(nuvarande: dict, andringar: dict) -> dict:
+    if not andringar:
+        raise ValueError("Inga ändringar angivna.")
+
+    okanda = [nyckel for nyckel in andringar if nyckel not in _ROTRUT_ALLOWLIST]
+    if okanda:
+        giltiga = ", ".join(sorted(_ROTRUT_ALLOWLIST))
+        raise SpirisKlientFel(f"Följande går inte att ändra för ROT/RUT: {sorted(okanda)}. Ändringsbara fält: {giltiga}.")
+
+    uppdaterat = dict(nuvarande)
+    for nyckel, varde in andringar.items():
+        uppdaterat[nyckel] = varde
+    return uppdaterat
+
+
 def utfor_utkast(
     klient: _Spirisklient, typ: str, nyttolast: dict, mal: str = MAL_UTKAST,
     granskad_mottagare: str | None = None,
@@ -627,26 +705,18 @@ def utfor_utkast(
         
     if typ == UTKASTTYP_UNDERLAGSKOPPLING:
         return klient.skicka("/attachmentlinks", nyttolast)
-        # Filen läses HÄR, vid utförandet — utkastet bär bara sökvägen och de
-        # granskade flaggorna. Innehållet har aldrig passerat en AI, och
-        # nyttolastens hash binder användarens beslut (vilken fil, vilka
-        # flaggor), inte filens bytes.
-        sokvag = Path(nyttolast["sokvag"])
-        try:
-            innehall = sokvag.read_bytes()
-        except OSError as e:
-            raise SpirisKlientFel(
-                f"Kunde inte läsa SIE4-filen {sokvag.name!r}. "
-                "Ingenting har importerats."
-            ) from e
-        payload = bygg_sie4import_payload(
-            innehall,
-            importera_ingaende_balans=bool(nyttolast.get("ingaende_balans", False)),
-            importera_kontonamn=bool(nyttolast.get("kontonamn", False)),
-            mappa_konton=bool(nyttolast.get("mappa_konton", False)),
-            arsavslut=bool(nyttolast.get("arsavslut", False)),
-        )
-        return importera_sie4(klient, payload)
+
+    if typ == UTKASTTYP_PERIODISERING:
+        return klient.skicka("/allocationperiods", bygg_periodiseringspayload(nyttolast))
+
+    if typ == UTKASTTYP_PERIODISERINGSANDRING:
+        return klient.uppdatera("/allocationperiods", bygg_periodiseringspayload(nyttolast))
+
+    if typ == UTKASTTYP_PERIODISERINGSBORTTAGNING:
+        _id = nyttolast["leverantorsfakturautkast_id"]
+        klient.ta_bort(f"/supplierinvoicedrafts/{_id}/allocationperiods")
+        return {"borttaget": _id}
+
 
     if typ == UTKASTTYP_MASTERDATAANDRING:
         return andra_masterdata(
@@ -666,6 +736,26 @@ def utfor_utkast(
 
     if typ == UTKASTTYP_UTKASTBOKFORING:
         return bokfor_utkast(klient, nyttolast["utkasttyp"], nyttolast["utkast_id"])
+
+
+    if typ == UTKASTTYP_KONTO:
+        return klient.skicka("/accounts", bygg_kontopayload(nyttolast))
+
+
+    if typ == UTKASTTYP_BOKFORINGSLAS:
+        return klient.uppdatera("/companysettings/accountinglocksettings", bygg_bokforingslas_payload(nyttolast))
+
+    if typ == UTKASTTYP_ROTRUT:
+        p = bygg_rotrut_payload(nyttolast["nuvarande"], nyttolast["andringar"])
+        return klient.uppdatera("/companysettings/rotrut", p)
+
+    if typ == UTKASTTYP_KONTOANDRING:
+        # nyttolast innehåller 'rakenskapsar_id', 'kontonr', 'nuvarande' och 'andringar'
+        # men vänta, utkast sparas utan `nuvarande` om den var stor, men
+        # i U11 "hämta nuvarande konto, lägg ändringarna ovanpå"
+        # Vi lägger `nuvarande` i nyttolast!
+        p = bygg_kontoandring_payload(nyttolast["nuvarande"], nyttolast["andringar"])
+        return klient.uppdatera(f"/accounts/{nyttolast['rakenskapsar_id']}/{nyttolast['kontonr']}", p)
 
     if typ == UTKASTTYP_MASTERDATABORTTAGNING:
         ta_bort_masterdata(
@@ -700,6 +790,9 @@ def utfor_utkast(
         else:
             objekt_id = str(nyttolast["objekt"])
         return attestera(klient, objekttyp, objekt_id, nyttolast["beslut"])
+
+    if typ == UTKASTTYP_KVITTNING:
+        return skapa_kvittning(klient, nyttolast["kreditfaktura_id"], nyttolast["payload"])
 
     if typ == UTKASTTYP_LEVERANTORSBETALNING:
         faktura = _hitta_leverantorsfaktura(klient, nyttolast["faktura"])
@@ -783,6 +876,36 @@ def utfor_utkast(
                 klient, bygg_kundfakturautkast_payload(payload, losta)
             )
         return skapa_kundfaktura(klient, payload)
+
+    if typ == "offertutkast":
+        kund = _hitta_kund(klient, nyttolast["kundnamn"])
+        kund_id = str(kund.get("Id") or "")
+        rader_in = [
+            {
+                "beskrivning": rad["beskrivning"],
+                "belopp": Decimal(str(rad["pris"])),
+                "antal": Decimal(str(rad["antal"])),
+                "kontonr": rad.get("konto") or "",
+            }
+            for rad in nyttolast["rader"]
+        ]
+        losta = losa_artikel_ider_for_fakturarader(klient, rader_in)
+        kf_payload = bygg_kundfaktura_payload(kund_id, losta, "2000-01-01", "2000-01-01")
+        
+        pl = {
+            "CustomerId": kund_id,
+            "QuoteDate": nyttolast.get("offertdatum"),
+            "DueDate": nyttolast.get("forfallodatum"),
+            "Rows": kf_payload.get("Rows", []),
+        }
+        if nyttolast.get("valuta"): pl["CurrencyCode"] = nyttolast["valuta"]
+        if nyttolast.get("inkl_moms") is not None: pl["IncludesVat"] = nyttolast["inkl_moms"]
+        if nyttolast.get("leveransdatum"): pl["DeliveryDate"] = nyttolast["leveransdatum"]
+        if nyttolast.get("kundreferens"): pl["CustomerReference"] = nyttolast["kundreferens"]
+        if nyttolast.get("var_referens"): pl["CompanyReference"] = nyttolast["var_referens"]
+
+        skapad = klient.skapa("/quotedrafts", pl)
+        return {"offertutkast_id": skapad.get("Id"), "kund": nyttolast["kundnamn"]}
 
     if typ == "verifikat":
         payload = _bygg_verifikat_payload(nyttolast)
@@ -977,6 +1100,38 @@ def hamta_offerter(klient: _Spirisklient) -> list[dict]:
     """Offerter. Ligger på `/quotes` i Spiris — INTE `/offers`, som ger 404
     (det är Fortnox namn på samma sak)."""
     return _saljdokument(klient, "/quotes", "QuoteDate")
+
+
+
+def hamta_offertutkast(klient: _Spirisklient) -> list[dict]:
+    vakt = _bygg_namnvakt()
+    rader = []
+    for d in klient.hamta_alla("/quotedrafts"):
+        visat, _ = _motpartsnamn(
+            d.get("CustomerName") or "", "",
+            False, vakt, # No CustomerIsPrivatePerson available, assume False for mask
+        )
+        rader.append({
+            "Id": d.get("Id"),
+            "Number": d.get("Number"),
+            "CustomerId": d.get("CustomerId"),
+            "CustomerName": visat,
+            "CustomerNumber": d.get("CustomerNumber"),
+            "QuoteDate": d.get("QuoteDate"),
+            "DueDate": d.get("DueDate"),
+            "DeliveryDate": d.get("DeliveryDate"),
+            "CurrencyCode": d.get("CurrencyCode"),
+            "TotalAmount": d.get("TotalAmount"),
+            "VatAmount": d.get("VatAmount"),
+            "RoundingsAmount": d.get("RoundingsAmount"),
+            "Status": d.get("Status"),
+            "Rows": d.get("Rows", []),
+            "IncludesVat": d.get("IncludesVat"),
+            "IsDomestic": d.get("IsDomestic"),
+            "YourReference": d.get("YourReference") or d.get("CustomerReference"),
+            "OurReference": d.get("OurReference") or d.get("CompanyReference"),
+        })
+    return rader
 
 
 def hamta_bankkonton(klient: _Spirisklient) -> list[dict]:
@@ -2172,7 +2327,7 @@ def makulera_faktura(klient: _Spirisklient, faktura_id: str) -> dict:
 # skapar en kreditfaktura mot en riktig kund vore precis den sortens gissning
 # som resten av modulen är byggd för att undvika.
 
-_SALJDOKUMENT: dict[str, str] = {"offert": "/quotes", "order": "/orders"}
+_SALJDOKUMENT: dict[str, str] = {"offert": "/quotes", "order": "/orders", "offertutkast": "/quotedrafts"}
 
 # ElectronicInvoiceRequestApi.SendType. 1 = AutoInvoiceElectronic.
 EFAKTURA_ELEKTRONISK = 1
@@ -2190,6 +2345,8 @@ _SALJDOKUMENTATGARDER: dict[tuple[str, str], tuple[str, str, dict]] = {
     ("order", "till_faktura"): ("POST", "convert", {}),
     ("order", "slutford"): ("POST", "completed", {}),
     ("order", "makulerad"): ("POST", "voided", {}),
+    ("offertutkast", "till_offert"): ("PUT", "convert", {}),
+    ("order", "till_backorder"): ("POST", "backorder", {}),
 }
 
 
@@ -2399,6 +2556,7 @@ def utfor_saljdokumentatgard(
 UTKASTTYP_LEVERANTORSFAKTURA = "leverantorsfakturautkast"
 UTKASTTYP_ATTEST = "attest"
 UTKASTTYP_LEVERANTORSBETALNING = "leverantorsbetalning"
+UTKASTTYP_KVITTNING = "kvittning"
 UTKASTTYP_BETALNINGSVERIFIKAT = "betalningsverifikat"
 
 # ApprovalApi.DocumentApprovalStatus.
@@ -2735,6 +2893,7 @@ _UTKASTSLAG: dict[str, str] = {
     "verifikat": "/voucherdrafts",
     "kundfaktura": "/customerinvoicedrafts",
     "leverantorsfaktura": "/supplierinvoicedrafts",
+    "offertutkast": "/quotedrafts",
 }
 
 _UTKASTANDRING: dict[str, tuple[str, dict[str, str]]] = {
@@ -2743,6 +2902,12 @@ _UTKASTANDRING: dict[str, tuple[str, dict[str, str]]] = {
         "text": "VoucherText",
         "serie": "NumberSeries",
         "rader": "Rows"
+    }),
+    "kundfaktura": ("/customerinvoicedrafts", {
+        k: k for k in ['Rows', 'InvoiceDate', 'DueDate', 'DeliveryDate', 'YourReference', 'OurReference', 'BuyersOrderReference', 'ElectronicReference', 'InvoiceCustomerName', 'InvoiceAddress1', 'InvoiceAddress2', 'InvoicePostalCode', 'InvoiceCity', 'InvoiceCountryCode', 'DeliveryCustomerName', 'DeliveryAddress1', 'DeliveryAddress2', 'DeliveryPostalCode', 'DeliveryCity', 'DeliveryCountryCode', 'DeliveryMethodName', 'DeliveryTermName', 'DeliveryMethodCode', 'DeliveryTermCode', 'TermsOfPaymentId', 'IncludesVat', 'EuThirdParty', 'IsCreditInvoice']
+    }),
+    "leverantorsfaktura": ("/supplierinvoicedrafts", {
+        k: k for k in ['Rows', 'InvoiceDate', 'DueDate', 'PaymentDate', 'InvoiceNumber', 'OcrNumber', 'Message', 'BankAccountId', 'IsCreditInvoice', 'SkipSendToBank', 'AccountingTemplateId']
     })
 }
 
@@ -2913,6 +3078,13 @@ def ta_bort_masterdata(
 UTKASTTYP_SIE4IMPORT = "sie4import"
 
 UTKASTTYP_UNDERLAGSKOPPLING = "underlagskoppling"
+UTKASTTYP_PERIODISERING = "periodisering"
+UTKASTTYP_PERIODISERINGSANDRING = "periodiseringsandring"
+UTKASTTYP_PERIODISERINGSBORTTAGNING = "periodiseringsborttagning"
+UTKASTTYP_KONTO = "konto"
+UTKASTTYP_KONTOANDRING = "kontoandring"
+UTKASTTYP_BOKFORINGSLAS = "bokforingslas"
+UTKASTTYP_ROTRUT = "rotrut"
 
 def bygg_utkast_underlagskoppling(underlag_id: str, dokument_id: str, dokument_typ: str) -> dict:
     return {
@@ -3079,6 +3251,15 @@ def hamta_granskad_mottagare(
         return hamta_efakturagranskning(klient, nyttolast["fakturanummer"])["mottagare"]
     raise SpirisKlientFel(f"Typen {typ!r} är inte utåtriktad och har ingen mottagare.")
 
+
+def hamta_bokforingslas(klient: _Spirisklient) -> dict:
+    rå = klient.hamta_en("/companysettings")
+    return {
+        "last_till_och_med": rå.get("AccountingLockedAsOf"),
+        "lasintervall": rå.get("AccountingLockInterval"),
+        "skattedeklarationsdatum": rå.get("TaxDeclarationDate")
+    }
+
 def hamta_kontoplan_alla(klient: _Spirisklient) -> list[dict]:
     """Kontoplan över alla räkenskapsår (GET /accounts)."""
     rader: list[dict] = []
@@ -3201,10 +3382,13 @@ _ENKELUPPSLAG: dict[str, str] = {
     "artikel":                "/articles",
     "projekt":                "/projects",
     "momsrapport":            "/vatreports",
+    "offertutkast":           "/quotedrafts",
     "verifikatutkast":        "/voucherdrafts",
     "kundfakturautkast":      "/customerinvoicedrafts",
     "leverantorsfakturautkast": "/supplierinvoicedrafts",
     "periodiseringar":        "/allocationperiods",
+    "bokforingslas":          "/companysettings",
+    "rotrut":                 "/companysettings/rotrut",
 }
 
 class _EnkelKlient:
@@ -3212,6 +3396,8 @@ class _EnkelKlient:
         self.rå = rå
     def hamta_alla(self, path: str, **kwargs) -> list[dict]:
         return [self.rå]
+    def hamta_en(self, path: str, **kwargs) -> dict:
+        return self.rå
 
 def hamta_ett(klient: _Spirisklient, typ: str, objekt_id: str) -> dict:
     """Rått enkeluppslag för djupfelsökning."""
@@ -3223,10 +3409,12 @@ def hamta_ett(klient: _Spirisklient, typ: str, objekt_id: str) -> dict:
     rå = klient.hamta_en(f"{_ENKELUPPSLAG[typ]}/{objekt_id}")
     fk = _EnkelKlient(rå)
     
+    if typ == "bokforingslas": return hamta_bokforingslas(fk)
     if typ == "kundfaktura": return hamta_kundfakturor(fk)[0]
     if typ == "leverantorsfaktura": return hamta_leverantorsfakturor(fk)[0]
     if typ == "order": return hamta_order(fk)[0]
     if typ == "offert": return hamta_offerter(fk)[0]
+    if typ == "offertutkast": return hamta_offertutkast(fk)[0]
     if typ == "kund": return hamta_kunder(fk)[0]
     if typ == "leverantor": return hamta_leverantorer(fk)[0]
     if typ == "artikel": return hamta_artiklar(fk)[0]
@@ -3349,5 +3537,69 @@ def _bygg_betalningsverifikat_payload(nyttolast: dict) -> dict:
 def skapa_betalningsverifikat(klient: _Spirisklient, payload: dict) -> dict:
     return klient.skicka("/voucherwithoverunderpayment", payload)
 
+def skapa_kvittning(klient: _Spirisklient, kreditfaktura_id: str, payload: dict) -> dict:
+    ogiltiga = set(payload.keys()) - {"DebitInvoiceIds", "VoucherDate"}
+    if ogiltiga:
+        raise SpirisKlientFel(f"Endast DebitInvoiceIds och VoucherDate får skickas. Felaktiga nycklar: {ogiltiga}")
+        
+    debet_ids = payload.get("DebitInvoiceIds", [])
+    if not debet_ids:
+        raise SpirisKlientFel("DebitInvoiceIds får inte vara tom.")
+
+    # Hämtningen görs vid utförandet, inte när förslaget läggs
+    kandidater = hamta_kvittningskandidater(klient, kreditfaktura_id)
+    kandidat_ids = {str(k.get("Id", "")) for k in kandidater}
+
+    for d_id in debet_ids:
+        if str(d_id) not in kandidat_ids:
+            raise SpirisKlientFel(f"Debetfakturan {d_id} är inte en giltig kvittningskandidat.")
+
+    return klient.skicka(f"/supplierinvoices/{kreditfaktura_id}/offset", payload)
+
 def hamta_kvittningskandidater(klient: _Spirisklient, faktura_id: str) -> list[dict]:
     return klient.hamta_alla(f"/supplierinvoices/{faktura_id}/offsetcandidates")
+
+
+def bygg_periodiseringspayload(nyttolast: dict) -> list[dict]:
+    """Bygger payload för POST /allocationperiods (eller PUT)."""
+    from decimal import Decimal
+    if "antal_perioder" not in nyttolast or int(nyttolast["antal_perioder"]) < 1:
+        raise ValueError("antal_perioder saknas eller är mindre än 1")
+    if "belopp" not in nyttolast or Decimal(nyttolast["belopp"]) <= 0:
+        raise ValueError("belopp saknas eller är inte större än 0")
+        
+    p = {
+        "BookkeepingStartDate": nyttolast["startdatum"],
+        "AmountToAllocate": nyttolast["belopp"],
+        "AllocationAccountNumber": nyttolast["konto"],
+        "NumberOfAllocationPeriods": nyttolast["antal_perioder"],
+    }
+    
+    # Exakt ett kopplingspar krävs (noll eller två -> ValueError)
+    pairs = 0
+    if "VoucherId" in nyttolast and "VoucherRow" in nyttolast:
+        p["VoucherId"] = nyttolast["VoucherId"]
+        p["VoucherRow"] = nyttolast["VoucherRow"]
+        pairs += 1
+    if "SupplierInvoiceId" in nyttolast and "SupplierInvoiceRow" in nyttolast:
+        p["SupplierInvoiceId"] = nyttolast["SupplierInvoiceId"]
+        p["SupplierInvoiceRow"] = nyttolast["SupplierInvoiceRow"]
+        pairs += 1
+    if "SupplierInvoiceDraftId" in nyttolast and "SupplierInvoiceDraftRow" in nyttolast:
+        p["SupplierInvoiceDraftId"] = nyttolast["SupplierInvoiceDraftId"]
+        p["SupplierInvoiceDraftRow"] = nyttolast["SupplierInvoiceDraftRow"]
+        pairs += 1
+        
+    if pairs != 1:
+        raise ValueError("Exakt ett kopplingspar krävs (t.ex. VoucherId och VoucherRow).")
+        
+    return [p]
+
+
+def bygg_underlagskopplingspayload(underlag_id: str, dokument_id: str, dokument_typ: str) -> dict:
+    """Bygger nyttolasten för attachmentlinks."""
+    return {
+        "DocumentId": dokument_id,
+        "AttachmentIds": [underlag_id],
+        "DocumentType": dokument_typ
+    }

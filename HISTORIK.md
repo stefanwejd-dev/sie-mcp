@@ -48,6 +48,14 @@ utvecklaren.
 | 2026-07-07 | Fix Sektion 4 crash on repeated sensitive text (unique widget keys) |
 | 2026-07-07 | Add masked general-ledger RAG tools (Fas E, steg 2) |
 | 2026-07-07 | Add Spiris RAG MCP tools with session handling (Fas E, steg 3) |
+| 2026-08-10 | Fix bugs in periodisering and underlagskoppling (Etapp 8) |
+| 2026-08-10 | Fix precision bug with Decimal in belopp validation (Etapp 9) |
+| 2026-08-10 | Add support for periodisering via MCP tools (Etapp 11) |
+| 2026-08-10 | Add support for kontoplan and kontosaldo lookup and editing (Etapp 12) |
+| 2026-08-10 | Add support for bokföringslås and RUT/ROT details (Etapp 13) |
+| 2026-08-10 | Add support for utkastandring with field whitelisting (Etapp 14) |
+| 2026-08-10 | Add support for offertutkast, saljdokumentatgard (Etapp 15) |
+| 2026-08-10 | Add support for supplier invoice offset / kvittning (Etapp 15b) |
 | 2026-07-08 | Add structured BAS P&L report tool (Fas E, steg 4) |
 | 2026-07-08 | Enrich P&L accounts with group + normalized signs (Fas E, steg 5) |
 | 2026-07-08 | Add structured BAS balance-sheet tool (Fas E, steg 6) |
@@ -154,3 +162,16 @@ utvecklaren.
 | 2026-08-06 | docs: uppdatera statusruta med senast commit hash |
 | 2026-08-09 | feat: Genomför Etapp 0-3 i Spiris-täckningsplanen (transport, läsning, utkast, periodisering) samt tester |
 | 2026-08-09 | feat: Genomför Etapp 4-7 i Spiris-täckningsplanen (bilagor, kvittning, prompter, paginering) samt rökprov |
+
+
+### 2026-08-10 (Etapp 8 - Periodisering och Underlagskoppling)
+*   **Status**: IMPLEMENTERAT & RÖKTESTAT.
+*   **Ändringar**:
+    *   **R8.1**: Lagt till `UTKASTTYP_PERIODISERING` och skapat `bygg_periodiseringspayload` i `spiris_adapter.py`. Uppdaterat `forbered_periodisering` i `mcp_server/server.py` för att bygga korrekt `payload` med exakt koppling mot `Voucher`, `SupplierInvoice` eller `SupplierInvoiceDraft`.
+    *   **R8.2**: Skrivit om `forbered_underlagskoppling` att nyttja `_kor_utkastverktyg` samt skapat `bygg_underlagskopplingspayload` i adaptern, och därmed lagat maskeringsläckaget där parametrar passerade direkt in till utkastvyn (som därmed missade fail-closed grinden).
+    *   **R8.3**: Lagt till test för `forbered_underlagskoppling` i `test_mcp_villkorssparr.py` så att villkorsspärren täcker även denna typ.
+    *   **R8.4**: Rättat annoteringar så att funktioner som `spiris_underlag` returnerar `dict` istället för `str`, vilket krävs för async to thread-bron i `spiris_rag`.
+    *   **R8.5**: Raderat de döda if-satserna (rad 630-649) inuti utkastutföraren för underlagskoppling i `spiris_adapter.py`.
+    *   **R8.6**: Bekräftat att dökodstester är raderade och inte längre körs mot de borttagna raderna i adaptern.
+    *   **R8.7 (GRIND 10)**: Utfört GRIND 10 i sandboxen. Provet visade att specifikationen återigen **har fel**! Endpointen `POST /voucherwithoverunderpayment` FINNS faktiskt för svenska bolag (ger 400 Bad Request på tom kropp, inte 404/501). Funktionen `forbered_betalningsverifikat` är därmed INTE dödfödd och ska **inte** raderas.
+*   **Resultat**: 2238/2238 tester gröna. Maskeringsgränsen (Lagergräns 5) intakt.

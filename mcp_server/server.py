@@ -62,6 +62,30 @@ from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.fastmcp.server import Icon
 from pydantic import BaseModel, Field
 
+from decimal import Decimal, InvalidOperation
+
+def _belopp(varde: object, faltnamn: str) -> Decimal:
+    """Konverterar ett beloppsargument från MCP-gränsen till Decimal.
+
+    Ett int eller float avvisas med ValueError: flyttal avrundas redan innan
+    värdet når hit, och en tyst konvertering skulle dölja felet i stället för
+    att stoppa det."""
+    if isinstance(varde, bool) or isinstance(varde, (int, float)):
+        raise ValueError(f"Fältet '{faltnamn}' måste anges som sträng, inte {type(varde).__name__}")
+    if not isinstance(varde, str):
+        raise ValueError(f"Fältet '{faltnamn}' måste vara en sträng")
+        
+    s = varde.replace(" ", "").replace("\xa0", "")
+    if "," in s and "." in s:
+        raise ValueError(f"Fältet '{faltnamn}' innehåller både punkt och komma, vilket är tvetydigt")
+    
+    s = s.replace(",", ".")
+    try:
+        return Decimal(s)
+    except InvalidOperation:
+        raise ValueError(f"Fältet '{faltnamn}' är inte ett giltigt tal: {varde!r}")
+
+
 import compliance
 import revisionslogg
 import saker_lagring
@@ -591,6 +615,13 @@ async def spiris_order() -> dict:
     )
 
 
+
+@mcp.tool()
+async def spiris_offertutkast(ctx: Context | None = None) -> dict:
+    """Offertutkast som ännu inte skickats eller blivit skarpa offerter.
+    Låst fältallowlist för att minimera PII — adresser och kontaktpersoner rensas bort."""
+    return await _kor_spiris_verktyg(spiris_rag.hamta_offertutkast, KATEGORI_RESKONTRA)
+
 @mcp.tool()
 async def spiris_offerter() -> dict:
     """Offerter: offertnummer, kund, datum, belopp exkl. moms, moms och status.
@@ -973,6 +1004,66 @@ async def forbered_kund(
     )
 
 
+
+@mcp.tool()
+async def forbered_offertutkast(
+    kundnamn_eller_id: str,
+    rader: list[dict],
+    offertdatum: str,
+    forfallodatum: str,
+    valuta: str | None = None,
+    inkl_moms: bool | None = None,
+    leveransdatum: str | None = None,
+    kundreferens: str | None = None,
+    var_referens: str | None = None,
+    ctx: Context | None = None
+) -> dict:
+    """Förbered skapandet av ett nytt offertutkast (Quotedraft).
+    
+    Förslaget kommer att skapas med utkasttyp 'offertutkast'.
+    Kräver kundnamn (som slås upp vid utförande), offertdatum (YYYY-MM-DD),
+    förfallodatum (YYYY-MM-DD), och rader (artikel, antal, á-pris exkl moms, 
+    rabatt, konto etc).
+    """
+
+    def _bygg():
+        rensade: list[dict] = []
+        summa = 0.0
+        for rad in rader:
+            _a_val = rad.get("antal") if "antal" in rad and rad["antal"] != "" and rad["antal"] is not None else "0"
+            _p_val = rad.get("pris") if "pris" in rad and rad["pris"] != "" and rad["pris"] is not None else "0"
+            antal = float(_belopp(_a_val, "antal"))
+            pris = float(_belopp(_p_val, "pris"))
+            rensade.append(
+                {
+                    "beskrivning": str(rad.get("beskrivning") or ""),
+                    "antal": antal,
+                    "pris": pris,
+                    "konto": str(rad.get("konto") or ""),
+                }
+            )
+            summa += antal * pris
+            
+        nyttolast = {
+            "kundnamn": kundnamn_eller_id,
+            "rader": rensade,
+            "offertdatum": offertdatum or None,
+            "forfallodatum": forfallodatum or None,
+            "valuta": valuta,
+            "inkl_moms": inkl_moms,
+            "leveransdatum": leveransdatum,
+            "kundreferens": kundreferens,
+            "var_referens": var_referens,
+        }
+        sammanfattning = [["Kund", kundnamn_eller_id], ["Belopp", f"{summa:,.2f}"]]
+        u = utkast.skapa("offertutkast", nyttolast, sammanfattning)
+        return _utkastsvar(u, f"Ett offertutkast föreslås.")
+
+    sammanfattning = [["Kund", kundnamn_eller_id]]
+    return await _kor_utkastverktyg(
+        _bygg, ctx, "Förslag: skapa ett offertutkast", sammanfattning
+    )
+
 @mcp.tool()
 async def forbered_kundfaktura(
     kundnamn: str,
@@ -997,8 +1088,10 @@ async def forbered_kundfaktura(
     _rensade: list[dict] = []
     _summa = 0.0
     for _rad in rader:
-        _antal = float(_rad.get("antal") or 0)
-        _pris = float(_rad.get("pris") or 0)
+        _a_val = _rad.get("antal") if "antal" in _rad and _rad["antal"] != "" and _rad["antal"] is not None else "0"
+        _p_val = _rad.get("pris") if "pris" in _rad and _rad["pris"] != "" and _rad["pris"] is not None else "0"
+        _antal = float(_belopp(_a_val, "antal"))
+        _pris = float(_belopp(_p_val, "pris"))
         _rensade.append({
             "beskrivning": str(_rad.get("beskrivning") or ""),
             "antal": _antal, "pris": _pris, "konto": str(_rad.get("konto") or ""),
@@ -1018,8 +1111,10 @@ async def forbered_kundfaktura(
         rensade: list[dict] = []
         summa = 0.0
         for rad in rader:
-            antal = float(rad.get("antal") or 0)
-            pris = float(rad.get("pris") or 0)
+            _a_val = rad.get("antal") if "antal" in rad and rad["antal"] != "" and rad["antal"] is not None else "0"
+            _p_val = rad.get("pris") if "pris" in rad and rad["pris"] != "" and rad["pris"] is not None else "0"
+            antal = float(_belopp(_a_val, "antal"))
+            pris = float(_belopp(_p_val, "pris"))
             rensade.append(
                 {
                     "beskrivning": str(rad.get("beskrivning") or ""),
@@ -1068,14 +1163,16 @@ async def forbered_verifikat(
     _rensade: list[dict] = []
     _debet = _kredit = 0.0
     for _rad in rader:
-        _d = float(_rad.get("debet") or 0)
-        _k = float(_rad.get("kredit") or 0)
+        _d_val = _rad.get("debet") if "debet" in _rad and _rad["debet"] != "" and _rad["debet"] is not None else "0"
+        _k_val = _rad.get("kredit") if "kredit" in _rad and _rad["kredit"] != "" and _rad["kredit"] is not None else "0"
+        _d = _belopp(_d_val, "debet")
+        _k = _belopp(_k_val, "kredit")
         _rensade.append({
-            "konto": str(_rad.get("konto") or ""), "debet": _d, "kredit": _k,
+            "konto": str(_rad.get("konto") or ""), "debet": float(_d), "kredit": float(_k),
             "text": str(_rad.get("text") or ""),
         })
-        _debet += _d
-        _kredit += _k
+        _debet += float(_d)
+        _kredit += float(_k)
     sammanfattning = [
         ["Beskrivning", beskrivning],
         ["Datum", transaktionsdatum],
@@ -1182,7 +1279,7 @@ async def forbered_fakturautskick(
 
 @mcp.tool()
 async def forbered_betalningspaminnelse(
-    fakturanummer: str, drojsmalsavgift: float | None = None,
+    fakturanummer: str, drojsmalsavgift: str | None = None,
     meddelande: str = "", ctx: Context | None = None,
 ) -> dict:
     """Förbereder en BETALNINGSPÅMINNELSE för en förfallen kundfaktura, som ett
@@ -1194,13 +1291,19 @@ async def forbered_betalningspaminnelse(
     Dröjsmålsavgift är ett anspråk mot kunden — föreslå den bara om användaren
     uttryckligen bett om det, aldrig på eget initiativ. Mottagarens
     e-postadress kan du inte se och ska inte efterfråga."""
+    _d = None
+    if drojsmalsavgift is not None:
+        _d = float(_belopp(drojsmalsavgift, "drojsmalsavgift"))
+        if _d < 0:
+            raise ValueError(f"Avgiften kan inte vara negativ, fick {_d}")
+
     sammanfattning = [
         ["Åtgärd", "Skicka betalningspåminnelse"],
         ["Fakturanummer", str(fakturanummer)],
         ["Mottagare", "visas för dig lokalt vid godkännandet"],
         [
             "Dröjsmålsavgift",
-            f"{drojsmalsavgift:,.2f}" if drojsmalsavgift is not None else "ingen",
+            f"{_d:,.2f}" if _d is not None else "ingen",
         ],
     ]
 
@@ -1231,7 +1334,7 @@ async def forbered_betalningspaminnelse(
 
 @mcp.tool()
 async def forbered_betalningsregistrering(
-    fakturanummer: str, belopp: float, betaldatum: str, bankkonto_id: str,
+    fakturanummer: str, belopp: str, betaldatum: str, bankkonto_id: str,
     referens: str = "", ctx: Context | None = None,
 ) -> dict:
     """Förbereder REGISTRERING av en mottagen kundbetalning, som ett utkast för
@@ -1244,24 +1347,26 @@ async def forbered_betalningsregistrering(
     kvarvarande beloppet bokförs betalningen som fullbetalning, annars som
     delbetalning — den bedömningen görs lokalt mot fakturans verkliga
     restbelopp, inte av dig."""
+    _b = float(_belopp(belopp, "belopp"))
+    if _b <= 0:
+        raise ValueError("beloppet måste vara större än noll")
+        
     sammanfattning = [
         ["Åtgärd", "Registrera kundbetalning"],
         ["Fakturanummer", str(fakturanummer)],
-        ["Belopp", f"{belopp:,.2f}"],
+        ["Belopp", f"{_b:,.2f}"],
         ["Betaldatum", betaldatum],
         ["Bankkonto", bankkonto_id],
     ]
 
     def _bygg():
-        if float(belopp) <= 0:
-            raise ValueError("beloppet måste vara större än noll")
         if not str(bankkonto_id).strip():
             raise ValueError("bankkonto_id saknas")
         u = utkast.skapa(
             "betalningsregistrering",
             {
                 "fakturanummer": str(fakturanummer).strip(),
-                "belopp": float(belopp),
+                "belopp": _b,
                 "betaldatum": betaldatum,
                 "bankkonto_id": str(bankkonto_id).strip(),
                 "referens": referens,
@@ -1269,12 +1374,12 @@ async def forbered_betalningsregistrering(
             sammanfattning,
         )
         return _utkastsvar(
-            u, f"Betalning på {belopp:,.2f} för faktura {fakturanummer} föreslås."
+            u, f"Betalning på {_b:,.2f} för faktura {fakturanummer} föreslås."
         )
 
     return await _kor_utkastverktyg(
         _bygg, ctx,
-        f"Förslag: registrera betalning på {belopp:,.2f} för faktura {fakturanummer}",
+        f"Förslag: registrera betalning på {_b:,.2f} för faktura {fakturanummer}",
         sammanfattning,
     )
 
@@ -1335,6 +1440,8 @@ GILTIGA_SALJDOKUMENTATGARDER: frozenset[tuple[str, str]] = frozenset({
     ("order", "till_faktura"),
     ("order", "slutford"),
     ("order", "makulerad"),
+    ("offertutkast", "till_offert"),
+    ("order", "till_backorder"),
 })
 
 
@@ -1436,6 +1543,8 @@ async def forbered_saljdokumentatgard(
       order/till_faktura   — skapa en kundfaktura av ordern
       order/slutford       — markera ordern som levererad
       order/makulerad      — makulera ordern
+      offertutkast/till_offert — konvertera offertutkast till riktig offert
+      order/till_backorder — skapa restorder
 
     Detta verktyg utför INGENTING. Åtgärderna når ingen utanför bolaget, men de
     ändrar dokumentets tillstånd oåterkalleligt — en konverterad offert kan
@@ -1478,7 +1587,7 @@ async def forbered_saljdokumentatgard(
 @mcp.tool()
 async def forbered_leverantorsfakturautkast(
     leverantor_id: str, rader: list[dict], fakturanummer: str = "",
-    fakturadatum: str = "", forfallodatum: str = "", totalbelopp: float = 0.0,
+    fakturadatum: str = "", forfallodatum: str = "", totalbelopp: str = "0.0",
     kreditfaktura: bool = False, ctx: Context | None = None,
 ) -> dict:
     """Förbereder en LEVERANTÖRSFAKTURA som ett utkast för mänskligt
@@ -1495,18 +1604,22 @@ async def forbered_leverantorsfakturautkast(
 
     Detta verktyg bokför INGENTING. Godkänns förslaget skapas ett UTKAST i
     Spiris som människan granskar och bokför där."""
+    _b = float(_belopp(totalbelopp, "totalbelopp"))
     sammanfattning = [
         ["Åtgärd", "Skapa leverantörsfakturautkast"],
         ["Leverantör", leverantor_id],
         ["Fakturanummer", str(fakturanummer or "(saknas)")],
-        ["Totalbelopp", f"{totalbelopp:,.2f}"],
+        ["Totalbelopp", f"{_b:,.2f}"],
         ["Kreditfaktura", "ja" if kreditfaktura else "nej"],
     ]
     for _rad in rader:
+        _d_val = _rad.get("debet") if "debet" in _rad and _rad["debet"] != "" and _rad["debet"] is not None else "0"
+        _k_val = _rad.get("kredit") if "kredit" in _rad and _rad["kredit"] != "" and _rad["kredit"] is not None else "0"
+        _d = float(_belopp(_d_val, "debet"))
+        _k = float(_belopp(_k_val, "kredit"))
         sammanfattning.append([
             f"Konto {_rad.get('konto')}",
-            f"debet {float(_rad.get('debet') or 0):,.2f} / "
-            f"kredit {float(_rad.get('kredit') or 0):,.2f}",
+            f"debet {_d:,.2f} / kredit {_k:,.2f}",
         ])
 
     def _bygg():
@@ -1590,7 +1703,7 @@ async def forbered_attest(
 
 @mcp.tool()
 async def forbered_leverantorsbetalning(
-    faktura: str, belopp: float, betaldatum: str, bankkonto_id: str,
+    faktura: str, belopp: str, betaldatum: str, bankkonto_id: str,
     referens: str = "", ctx: Context | None = None,
 ) -> dict:
     """Förbereder REGISTRERING av en betalning till en leverantör, som ett
@@ -1602,35 +1715,37 @@ async def forbered_leverantorsbetalning(
     Detta verktyg bokför INGENTING. Täcker beloppet hela restskulden bokförs
     betalningen som fullbetalning, annars som delbetalning — den bedömningen
     görs lokalt mot fakturans verkliga restbelopp, inte av dig."""
+    _b = float(_belopp(belopp, "belopp"))
+    if _b <= 0:
+        raise ValueError("beloppet måste vara större än noll")
+        
     sammanfattning = [
         ["Åtgärd", "Registrera leverantörsbetalning"],
         ["Faktura", str(faktura)],
-        ["Belopp", f"{belopp:,.2f}"],
+        ["Belopp", f"{_b:,.2f}"],
         ["Betaldatum", betaldatum],
         ["Bankkonto", bankkonto_id],
     ]
 
     def _bygg():
-        if float(belopp) <= 0:
-            raise ValueError("beloppet måste vara större än noll")
         if not str(bankkonto_id).strip():
             raise ValueError("bankkonto_id saknas")
         if not str(faktura).strip():
             raise ValueError("faktura saknas")
         u = utkast.skapa(
             "leverantorsbetalning",
-            {"faktura": str(faktura).strip(), "belopp": float(belopp),
+            {"faktura": str(faktura).strip(), "belopp": _b,
              "betaldatum": betaldatum,
              "bankkonto_id": str(bankkonto_id).strip(), "referens": referens},
             sammanfattning,
         )
         return _utkastsvar(
-            u, f"Betalning på {belopp:,.2f} till leverantör föreslås."
+            u, f"Betalning på {_b:,.2f} till leverantör föreslås."
         )
 
     return await _kor_utkastverktyg(
         _bygg, ctx,
-        f"Förslag: registrera leverantörsbetalning på {belopp:,.2f}",
+        f"Förslag: registrera leverantörsbetalning på {_b:,.2f}",
         sammanfattning,
     )
 
@@ -1968,9 +2083,8 @@ def visa_anvandarvillkor() -> dict:
 
 @mcp.tool()
 async def forbered_periodisering(
-    startdatum: str, belopp: float, konto: int, antal_perioder: int,
+    startdatum: str, belopp: str, konto: int, antal_perioder: int,
     verifikat_id: str = "", verifikat_rad: int = 0,
-    kundfaktura_id: str = "", kundfaktura_rad: int = 0,
     leverantorsfaktura_id: str = "", leverantorsfaktura_rad: int = 0,
     leverantorsfakturautkast_id: str = "", leverantorsfakturautkast_rad: int = 0,
     ctx: Context | None = None
@@ -1986,9 +2100,7 @@ async def forbered_periodisering(
     if verifikat_id:
         kopplingspar = f"verifikat {verifikat_id} rad {verifikat_rad}"
         antal_par += 1
-    if kundfaktura_id:
-        kopplingspar = f"kundfaktura {kundfaktura_id} rad {kundfaktura_rad}"
-        antal_par += 1
+
     if leverantorsfaktura_id:
         kopplingspar = f"lev.faktura {leverantorsfaktura_id} rad {leverantorsfaktura_rad}"
         antal_par += 1
@@ -1996,24 +2108,28 @@ async def forbered_periodisering(
         kopplingspar = f"lev.fakturautkast {leverantorsfakturautkast_id} rad {leverantorsfakturautkast_rad}"
         antal_par += 1
 
+    _b = float(_belopp(belopp, "belopp"))
+    if _b <= 0:
+        raise ValueError("Belopp måste vara större än 0")
+
     sammanfattning = [
         ["Åtgärd", "Skapa periodisering"],
         ["Startdatum", startdatum],
-        ["Belopp", str(belopp)],
+        ["Belopp", f"{_b:,.2f}"],
         ["Konto", str(konto)],
         ["Perioder", str(antal_perioder)],
         ["Koppling", kopplingspar],
     ]
 
+    if antal_par != 1:
+        raise ValueError("Exakt ett kopplingspar måste anges.")
+    if antal_perioder < 1:
+        raise ValueError("NumberOfAllocationPeriods måste vara >= 1")
+
     def _bygg():
-        if antal_par != 1:
-            raise ValueError("Exakt ett kopplingspar måste anges.")
-        if antal_perioder < 1:
-            raise ValueError("NumberOfAllocationPeriods måste vara >= 1")
-            
         payload = {
             "startdatum": startdatum,
-            "belopp": belopp,
+            "belopp": _b,
             "konto": konto,
             "antal_perioder": antal_perioder,
             "kopplingspar": kopplingspar
@@ -2021,9 +2137,7 @@ async def forbered_periodisering(
         if verifikat_id:
             payload["VoucherId"] = verifikat_id
             payload["VoucherRow"] = verifikat_rad
-        elif kundfaktura_id:
-            payload["CustomerInvoiceId"] = kundfaktura_id
-            payload["CustomerInvoiceRow"] = kundfaktura_rad
+
         elif leverantorsfaktura_id:
             payload["SupplierInvoiceId"] = leverantorsfaktura_id
             payload["SupplierInvoiceRow"] = leverantorsfaktura_rad
@@ -2031,7 +2145,8 @@ async def forbered_periodisering(
             payload["SupplierInvoiceDraftId"] = leverantorsfakturautkast_id
             payload["SupplierInvoiceDraftRow"] = leverantorsfakturautkast_rad
             
-        u = utkast.skapa("periodisering", payload, sammanfattning)
+        from parser.spiris_adapter import UTKASTTYP_PERIODISERING
+        u = utkast.skapa(UTKASTTYP_PERIODISERING, payload, sammanfattning)
         return _utkastsvar(u, f"Periodisering på {belopp} kr från {startdatum} föreslås.")
 
     return await _kor_utkastverktyg(
@@ -2040,37 +2155,48 @@ async def forbered_periodisering(
 
 
 @mcp.tool()
-async def spiris_underlag(include_matched: bool = False, offset: int = 0, limit: int = 0) -> str:
+async def spiris_underlag(include_matched: bool = False, offset: int = 0, limit: int = 0) -> dict:
     """Listar underlag/bilagor i Spiris (t.ex. inscannade kvitton). Returnerar envelope.
     Filnamnet, som ofta innehåller fritext, och leverantörsnamnet maskeras via namnregistret.
     include_matched=False ger endast o-kopplade (obokförda) underlag."""
     return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_underlag(k, include_matched, offset, limit), KATEGORI_UNDERLAG)
 
 @mcp.tool()
-async def spiris_hamta_underlag(underlag_id: str) -> str:
+async def spiris_hamta_underlag(underlag_id: str) -> dict:
     """Laddar ner ett underlag från Spiris (max 25 MB) och sparar det lokalt.
     Returnerar sökvägen till den sparade filen samt metadata, INTE filens innehåll.
     Detta verktyg maskerar inte innehållet inuti PDF/bilden."""
     return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_underlag_fil(k, underlag_id), KATEGORI_UNDERLAG)
 
 @mcp.tool()
-async def forbered_underlagskoppling(underlag_id: str, dokument_id: str, dokument_typ: str = "SupplierInvoice") -> str:
+async def forbered_underlagskoppling(
+    underlag_id: str, dokument_id: str, dokument_typ: str = "SupplierInvoice",
+    ctx: Context | None = None
+) -> dict:
     """Skapar ett utkast för att koppla ett befintligt underlag till ett befintligt dokument.
     dokument_typ är oftast 'SupplierInvoice' (Leverantörsfaktura) eller 'Voucher' (Verifikat)."""
-    import parser.utkast as utkast
-    from parser.spiris_adapter import UTKASTTYP_UNDERLAGSKOPPLING
-    payload = {
-        "DocumentId": dokument_id,
-        "AttachmentIds": [underlag_id],
-        "DocumentType": dokument_typ
-    }
-    u = utkast.skapa(
-        UTKASTTYP_UNDERLAGSKOPPLING,
-        payload,
-        f"Koppla bilaga till {dokument_id} ({dokument_typ})"
+    sammanfattning = [
+        ["Åtgärd", "Koppla underlag"],
+        ["Underlag", underlag_id],
+        ["Dokument", dokument_id],
+        ["Typ", dokument_typ]
+    ]
+
+    def _bygg():
+        if not str(underlag_id).strip() or not str(dokument_id).strip():
+            raise ValueError("underlag_id och dokument_id krävs")
+        from parser.spiris_adapter import bygg_underlagskopplingspayload, UTKASTTYP_UNDERLAGSKOPPLING
+        payload = bygg_underlagskopplingspayload(underlag_id, dokument_id, dokument_typ)
+        u = utkast.skapa(
+            UTKASTTYP_UNDERLAGSKOPPLING,
+            payload,
+            sammanfattning
+        )
+        return _utkastsvar(u, f"Utkast för att koppla bilaga till {dokument_id} ({dokument_typ}) skapat.")
+
+    return await _kor_utkastverktyg(
+        _bygg, ctx, f"Förslag: koppla bilaga", sammanfattning
     )
-    import json
-    return json.dumps({"utkast_id": u.utkast_id, "info": f"Utkast {u.utkast_id} skapat."})
 
 if __name__ == "__main__":
     mcp.run()
@@ -2326,6 +2452,12 @@ async def skatteverket_rattslig_vagledning(sokord: str) -> dict:
     return juridik_api.skapa_lank_skatteverket(sokord)
 
 
+
+@mcp.tool()
+async def spiris_bokforingslas(ctx: Context | None = None) -> dict:
+    """Hämtar inställningar för bokföringslås och skattedeklarationsdatum."""
+    return await _kor_spiris_verktyg(spiris_rag.hamta_bokforingslas, KATEGORI_STRUKTUR)
+
 @mcp.tool()
 async def spiris_kontoplan_alla() -> dict:
     """Kontoplan över alla räkenskapsår.
@@ -2390,11 +2522,11 @@ async def forbered_utkastandring(
 ) -> dict:
     """Förbereder en ÄNDRING av ett befintligt utkast.
 
-    utkasttyp: "verifikat" (andra är inte fastställda ännu)
+    utkasttyp: "verifikat", "kundfaktura", "leverantorsfaktura"
     utkast_id: utkastets id
     andringar: {fältnamn: nytt värde}
     
-    För 'verifikat' tillåts: datum, text, serie, rader.
+    För 'verifikat' tillåts: datum, text, serie, rader. För fakturor: Spiris API-fält (t.ex. Rows, InvoiceDate).
 
     Detta ändrar ingenting i Spiris — det lägger bara ett förslag i
     utkastkön för mänskligt godkännande.
@@ -2407,8 +2539,8 @@ async def forbered_utkastandring(
         sammanfattning.append([f"Nytt värde: {_nyckel}", str(_varde)])
 
     def _bygg():
-        if utkasttyp != "verifikat":
-            raise ValueError("Bara 'verifikat' stöds för utkaständring i dagsläget.")
+        if utkasttyp not in ("verifikat", "kundfaktura", "leverantorsfaktura"):
+            raise ValueError("Ogiltig utkasttyp.")
         if not str(utkast_id).strip():
             raise ValueError("utkast_id saknas")
         if not andringar:
@@ -2446,6 +2578,8 @@ async def forbered_utkastborttagning(
         # Enkeluppslaget kräver suffixet "utkast" för dessa
         if utkasttyp == "verifikat":
             uppslagstyp = "verifikatutkast"
+        elif utkasttyp == "offertutkast":
+            uppslagstyp = "offertutkast"
         else:
             uppslagstyp = f"{utkasttyp}utkast"
             
@@ -2459,6 +2593,11 @@ async def forbered_utkastborttagning(
             text = utk.get("text", "")
             belopp = sum(abs(r.get("belopp", 0)) for r in utk.get("rader", [])) / 2
             radantal = len(utk.get("rader", []))
+        elif utkasttyp == "offertutkast":
+            datum = rå.get("QuoteDate") or ""
+            text = rå.get("CustomerName") or ""
+            belopp = rå.get("TotalAmount") or 0
+            radantal = len(rå.get("Rows") or [])
         else:
             datum = rå.get("InvoiceDate") or rå.get("VoucherDate") or ""
             text = rå.get("InvoiceText") or rå.get("VoucherText") or ""
@@ -2466,7 +2605,7 @@ async def forbered_utkastborttagning(
             radantal = len(rå.get("Rows") or [])
     except Exception as e:
         # U2.2: Fungerar inte hämtningen läggs inget förslag (fail-closed).
-        return _fel("Kunde inte hämta utkastet från Spiris. Inget förslag lades.")
+        return {"status": "error", "info": "Kunde inte hämta utkastet från Spiris. Inget förslag lades."}
 
     sammanfattning = [
         ["Åtgärd", f"TA BORT {utkasttyp}utkast"],
@@ -2509,6 +2648,8 @@ async def forbered_utkastbokforing(
         klient = bygg_klient()
         if utkasttyp == "verifikat":
             uppslagstyp = "verifikatutkast"
+        elif utkasttyp == "offertutkast":
+            uppslagstyp = "offertutkast"
         else:
             uppslagstyp = f"{utkasttyp}utkast"
             
@@ -2522,13 +2663,18 @@ async def forbered_utkastbokforing(
             text = utk.get("text", "")
             belopp = sum(abs(r.get("belopp", 0)) for r in utk.get("rader", [])) / 2
             radantal = len(utk.get("rader", []))
+        elif utkasttyp == "offertutkast":
+            datum = rå.get("QuoteDate") or ""
+            text = rå.get("CustomerName") or ""
+            belopp = rå.get("TotalAmount") or 0
+            radantal = len(rå.get("Rows") or [])
         else:
             datum = rå.get("InvoiceDate") or rå.get("VoucherDate") or ""
             text = rå.get("InvoiceText") or rå.get("VoucherText") or ""
             belopp = rå.get("TotalAmountInvoiceCurrency") or 0
             radantal = len(rå.get("Rows") or [])
     except Exception as e:
-        return _fel("Kunde inte hämta utkastet från Spiris. Inget förslag lades.")
+        return {"status": "error", "info": "Kunde inte hämta utkastet från Spiris. Inget förslag lades."}
 
     sammanfattning = [
         ["Åtgärd", f"BOKFÖR {utkasttyp}utkast"],
@@ -2554,6 +2700,82 @@ async def forbered_utkastbokforing(
         _bygg, ctx, f"Förslag: bokför {utkasttyp}utkast {utkast_id}", sammanfattning
     )
 
+
+@mcp.tool()
+async def forbered_kvittning(
+    kreditfaktura_id: str,
+    debetfaktura_ids: list[str],
+    verifikatdatum: str,
+    ctx: Context | None = None,
+) -> dict:
+    '''Förbereder en kvittning av en leverantörskreditfaktura mot en eller flera debetfakturor.
+
+    Detta skapar ett utkast. När utkastet godkänns skapas ett BOKFÖRINGSVERIFIKAT (offset).
+    Ångring (`POST /supplierinvoices/{id}/offset/undo`) är medvetet inte tillgängligt (D5) 
+    och får göras manuellt i Spiris om det blir fel.
+
+    kreditfaktura_id: ID på kreditfakturan som ska kvittas.
+    debetfaktura_ids: Lista med ID:n på debetfakturorna som ska täckas (minst ett).
+    verifikatdatum: Datumet för kvittningsverifikatet (YYYY-MM-DD).
+    '''
+    try:
+        if not debetfaktura_ids:
+            return {"status": "error", "info": "Minst en debetfaktura måste anges (DebitInvoiceIds får inte vara tom)."}
+
+        # Hämta kreditfakturan för sammanfattningen
+        kredit_svar = await spiris_hamta_ett("leverantorsfaktura", kreditfaktura_id)
+        kredit_data = kredit_svar.get("data", [])
+        if not kredit_data:
+            return {"status": "error", "info": "Kreditfakturan hittades inte."}
+            
+        kredit = kredit_data[0]
+        kredit_nr = str(kredit.get("InvoiceNumber") or kreditfaktura_id)
+        
+        # Hämta kvittningskandidater (som listan från RAG)
+        kand_svar = await spiris_kvittningskandidater(kreditfaktura_id)
+        # kand_svar är nu env-omslagen, så riktiga datan ligger i "data"
+        kandidater = kand_svar.get("data", [])
+        
+        valda = []
+        # Kontrollera att alla angivna ID:n finns bland kandidaterna
+        for d_id in debetfaktura_ids:
+            hittad = next((k for k in kandidater if str(k.get("faktura_id")) == str(d_id)), None)
+            if not hittad:
+                return {"status": "error", "info": f"Debetfakturan {d_id} är inte en giltig kvittningskandidat för denna kreditfaktura."}
+            valda.append(hittad)
+            
+        totalt_kvar = sum(float(_belopp(v.get("kvarvarande", "0"), "kvarvarande")) for v in valda)
+
+        sammanfattning = [
+            ["Åtgärd", "Kvittning av leverantörskredit"],
+            ["Kreditfaktura", kredit_nr],
+        ]
+        for v in valda:
+            sammanfattning.append(["Debetfaktura", f"{v.get('fakturanr')} ({v.get('kvarvarande')} {v.get('valuta')})"])
+            
+        sammanfattning.append(["Totalt täckt", f"{totalt_kvar:,.2f}"])
+        sammanfattning.append(["Verifikatdatum", verifikatdatum])
+        
+        def _bygg():
+            u = utkast.skapa(
+                "kvittning",
+                {
+                    "kreditfaktura_id": str(kreditfaktura_id).strip(),
+                    "payload": {
+                        "DebitInvoiceIds": [str(d).strip() for d in debetfaktura_ids],
+                        "VoucherDate": str(verifikatdatum).strip(),
+                    }
+                },
+                sammanfattning,
+            )
+            return _utkastsvar(u, f"Kvittning mot {len(debetfaktura_ids)} debetfaktura(or) föreslås.")
+
+        return await _kor_utkastverktyg(_bygg, ctx, f"Förslag: Kvitta kreditfaktura {kredit_nr}", sammanfattning)
+        
+    except Exception as e:
+        _logga_lokalt("Kunde inte förbereda kvittning", e)
+        return {"status": "error", "info": f"Kunde inte förbereda kvittning: {e}"}
+
 @mcp.tool()
 async def spiris_kvittningskandidater(faktura_id: str) -> dict:
     '''Hämtar kvittningskandidater för en kreditfaktura (leverantör).'''
@@ -2568,19 +2790,21 @@ async def forbered_betalningsverifikat(
 ) -> dict:
     '''Förbereder ett betalningsverifikat för över- eller underbetalning.
     
-    rader: lista med {"konto": kontonummer, "debet": tal, "kredit": tal, "text": radtext}.
+    rader: lista med {"konto": kontonummer, "debet": "tal", "kredit": "tal", "text": radtext} (belopp anges som strängar).
     Måste balansera.'''
     _rensade: list[dict] = []
     _debet = _kredit = 0.0
     for _rad in rader:
-        _d = float(_rad.get("debet") or 0)
-        _k = float(_rad.get("kredit") or 0)
+        _d_val = _rad.get("debet") if "debet" in _rad and _rad["debet"] != "" and _rad["debet"] is not None else "0"
+        _k_val = _rad.get("kredit") if "kredit" in _rad and _rad["kredit"] != "" and _rad["kredit"] is not None else "0"
+        _d = _belopp(_d_val, "debet")
+        _k = _belopp(_k_val, "kredit")
         _rensade.append({
-            "konto": str(_rad.get("konto") or ""), "debet": _d, "kredit": _k,
+            "konto": str(_rad.get("konto") or ""), "debet": float(_d), "kredit": float(_k),
             "text": str(_rad.get("text") or ""),
         })
-        _debet += _d
-        _kredit += _k
+        _debet += float(_d)
+        _kredit += float(_k)
     sammanfattning = [
         ["Beskrivning", beskrivning],
         ["Datum", transaktionsdatum],
@@ -2654,3 +2878,421 @@ def granska_kundfordringar() -> str:
 @mcp.prompt()
 def forbered_bokslutsposter() -> str:
     return "Läs ingående balans, granska periodiseringar och kontrollera anläggningstillgångar." + _PROMPT_VARNING
+
+
+@mcp.tool()
+async def forbered_periodiseringsandring(
+    plan_id: str,
+    startdatum: str, belopp: str, konto: int, antal_perioder: int,
+    verifikat_id: str = "", verifikat_rad: int = 0,
+    leverantorsfaktura_id: str = "", leverantorsfaktura_rad: int = 0,
+    leverantorsfakturautkast_id: str = "", leverantorsfakturautkast_rad: int = 0,
+    ctx: Context | None = None
+) -> dict:
+    """Förbereder en ändring av en PERIODISERING som ett utkast för mänskligt godkännande.
+    
+    Exakt ETT kopplingspar måste anges (t.ex. verifikat_id och verifikat_rad).
+    antal_perioder måste vara minst 1."""
+    try:
+        gammal = await spiris_hamta_ett("periodiseringar", plan_id)
+        gammal = gammal["periodisering"]
+    except Exception:
+        raise ValueError(f"Kunde inte hämta befintlig periodisering {plan_id}.")
+        
+    gammalt_belopp = float(gammal.get("belopp", 0))
+    gamla_rader = len(gammal.get("rader", []))
+    
+    _b = float(_belopp(belopp, "belopp"))
+    if _b <= 0:
+        raise ValueError("Belopp måste vara större än 0")
+
+    kopplingspar = ""
+    antal_par = 0
+    if verifikat_id:
+        kopplingspar = f"verifikat {verifikat_id} rad {verifikat_rad}"
+        antal_par += 1
+    if leverantorsfaktura_id:
+        kopplingspar = f"lev.faktura {leverantorsfaktura_id} rad {leverantorsfaktura_rad}"
+        antal_par += 1
+    if leverantorsfakturautkast_id:
+        kopplingspar = f"lev.fakturautkast {leverantorsfakturautkast_id} rad {leverantorsfakturautkast_rad}"
+        antal_par += 1
+
+    sammanfattning = [
+        ["Åtgärd", "Ändra periodisering"],
+        ["Nuvarande belopp", f"{gammalt_belopp:,.2f}"],
+        ["Nuvarande perioder", str(gamla_rader)],
+        ["Nytt belopp", f"{_b:,.2f}"],
+        ["Nya perioder", str(antal_perioder)],
+        ["Nytt startdatum", startdatum],
+        ["Konto", str(konto)],
+        ["Koppling", kopplingspar],
+    ]
+    
+    if antal_par != 1:
+        raise ValueError("Exakt ett kopplingspar måste anges.")
+    if antal_perioder < 1:
+        raise ValueError("NumberOfAllocationPeriods måste vara >= 1")
+
+    def _bygg():
+        payload = {
+            "startdatum": startdatum,
+            "belopp": _b,
+            "konto": konto,
+            "antal_perioder": antal_perioder,
+            "kopplingspar": kopplingspar
+        }
+        if verifikat_id:
+            payload["VoucherId"] = verifikat_id
+            payload["VoucherRow"] = verifikat_rad
+        if leverantorsfaktura_id:
+            payload["SupplierInvoiceId"] = leverantorsfaktura_id
+            payload["SupplierInvoiceRow"] = leverantorsfaktura_rad
+        if leverantorsfakturautkast_id:
+            payload["SupplierInvoiceDraftId"] = leverantorsfakturautkast_id
+            payload["SupplierInvoiceDraftRow"] = leverantorsfakturautkast_rad
+
+        u = utkast.skapa(
+            "periodiseringsandring",
+            payload,
+            sammanfattning,
+        )
+        return _utkastsvar(u, f"Ändring av periodisering på {kopplingspar} föreslås.")
+
+    return await _kor_utkastverktyg(
+        _bygg, ctx,
+        f"Förslag: ändra periodisering på {kopplingspar}",
+        sammanfattning,
+    )
+
+@mcp.tool()
+async def forbered_periodiseringsborttagning(
+    leverantorsfakturautkast_id: str,
+    ctx: Context | None = None
+) -> dict:
+    """Förbereder borttagning av ALLA periodiseringar på ett leverantörsfakturautkast.
+    
+    Detta är den ENDA DELETE-vägen för periodiseringar i API:t. Det finns ingen
+    DELETE /allocationperiods/{id} — en enskild periodisering på ett verifikat
+    kan alltså inte tas bort. Åtgärden är oåterkallelig."""
+    
+    try:
+        draft = await spiris_hamta_ett("leverantorsfakturautkast", leverantorsfakturautkast_id)
+    except Exception:
+        raise ValueError(f"Kunde inte hämta leverantörsfakturautkast {leverantorsfakturautkast_id}.")
+        
+    periods = draft.get("AllocationPeriods", [])
+    if not periods:
+        # Sometimes periods are in Rows?
+        for row in draft.get("Rows", []):
+            if "AllocationPeriods" in row and row["AllocationPeriods"]:
+                periods.extend(row["AllocationPeriods"])
+                
+    if not periods:
+        raise ValueError("Inga periodiseringar hittades på utkastet.")
+        
+    sammanfattning = [
+        ["Åtgärd", "Ta bort ALLA periodiseringar"],
+        ["Utkast", leverantorsfakturautkast_id],
+        ["OBS!", "Oåterkalleligt. Det finns ingen väg för att ångra."]
+    ]
+    
+    for i, p in enumerate(periods, 1):
+        sammanfattning.append([f"Periodisering {i}", f"{p.get('Amount')} kr ({p.get('NumberOfAllocationPeriods')} perioder)"])
+        
+    def _bygg():
+        payload = {
+            "leverantorsfakturautkast_id": leverantorsfakturautkast_id
+        }
+        u = utkast.skapa(
+            "periodiseringsborttagning",
+            payload,
+            sammanfattning,
+        )
+        return _utkastsvar(u, f"Ta bort periodiseringar för utkast {leverantorsfakturautkast_id} (Oåterkalleligt, enskild periodisering kan inte tas bort).")
+
+    return await _kor_utkastverktyg(
+        _bygg, ctx,
+        f"Förslag: ta bort periodiseringar på utkast {leverantorsfakturautkast_id}",
+        sammanfattning,
+    )
+
+
+
+@mcp.tool()
+async def forbered_konto(
+    kontonr: str,
+    kontonamn: str,
+    rakenskapsar_id: str,
+    aktiv: bool,
+    kontotyp: str | None = None,
+    momskod_id: str | None = None,
+    projekt_tillatet: bool | None = None,
+    kostnadsstalle_tillatet: bool | None = None,
+    sparrat_for_manuell_bokning: bool | None = None,
+    ctx: Context | None = None
+) -> dict:
+    """Förbereder ett nytt konto som ett utkast för mänskligt godkännande.
+    
+    kontonr måste vara fyra siffror. Kontot får inte redan existera för räkenskapsåret.
+    kontotyp utelämnas vanligtvis så Spiris kan härleda den."""
+    if len(kontonr) != 4 or not kontonr.isdigit():
+        raise ValueError("kontonr måste vara fyra siffror (t.ex. 1930).")
+
+    # Kolla om kontot redan finns
+    alla_konton = await spiris_kontoplan_alla()
+    finns_redan = False
+    for k in alla_konton:
+        if k.get("kontonr") == kontonr and k.get("rakenskapsar_id") == rakenskapsar_id:
+            finns_redan = True
+            break
+            
+    if finns_redan:
+        raise ValueError(f"Kontot {kontonr} finns redan för räkenskapsår {rakenskapsar_id}.")
+
+    sammanfattning = [
+        ["Åtgärd", "Skapa konto"],
+        ["Konto", kontonr],
+        ["Namn", kontonamn],
+        ["Räkenskapsår", rakenskapsar_id],
+        ["Aktivt", "Ja" if aktiv else "Nej"],
+    ]
+    if kontotyp is not None:
+        sammanfattning.append(["Kontotyp", kontotyp])
+    if momskod_id is not None:
+        sammanfattning.append(["Momskod", momskod_id])
+        
+    def _bygg():
+        payload = {
+            "kontonr": kontonr,
+            "kontonamn": kontonamn,
+            "rakenskapsar_id": rakenskapsar_id,
+            "aktiv": aktiv,
+        }
+        if kontotyp is not None: payload["kontotyp"] = kontotyp
+        if momskod_id is not None: payload["momskod_id"] = momskod_id
+        if projekt_tillatet is not None: payload["projekt_tillatet"] = projekt_tillatet
+        if kostnadsstalle_tillatet is not None: payload["kostnadsstalle_tillatet"] = kostnadsstalle_tillatet
+        if sparrat_for_manuell_bokning is not None: payload["sparrat_for_manuell_bokning"] = sparrat_for_manuell_bokning
+
+        u = utkast.skapa(
+            "konto",
+            payload,
+            sammanfattning,
+        )
+        return _utkastsvar(u, f"Skapande av konto {kontonr} ({kontonamn}) föreslås.")
+
+    return await _kor_utkastverktyg(
+        _bygg, ctx,
+        f"Förslag: Skapa konto {kontonr}",
+        sammanfattning,
+    )
+
+
+@mcp.tool()
+async def forbered_kontoandring(
+    rakenskapsar_id: str,
+    kontonr: str,
+    kontonamn: str | None = None,
+    aktiv: bool | None = None,
+    kontotyp: str | None = None,
+    momskod_id: str | None = None,
+    projekt_tillatet: bool | None = None,
+    kostnadsstalle_tillatet: bool | None = None,
+    sparrat_for_manuell_bokning: bool | None = None,
+    ctx: Context | None = None
+) -> dict:
+    """Förbereder en ändring av ett existerande konto.
+    Endast de fält som anges kommer att ändras.
+    """
+    try:
+        nuvarande = await spiris_hamta_ett("konto", f"{rakenskapsar_id}/{kontonr}")
+    except Exception as e:
+        raise ValueError(f"Kunde inte hämta konto {kontonr} för räkenskapsår {rakenskapsar_id}: {e}")
+
+    andringar = {}
+    if kontonamn is not None: andringar["kontonamn"] = kontonamn
+    if aktiv is not None: andringar["aktiv"] = aktiv
+    if kontotyp is not None: andringar["kontotyp"] = kontotyp
+    if momskod_id is not None: andringar["momskod_id"] = momskod_id
+    if projekt_tillatet is not None: andringar["projekt_tillatet"] = projekt_tillatet
+    if kostnadsstalle_tillatet is not None: andringar["kostnadsstalle_tillatet"] = kostnadsstalle_tillatet
+    if sparrat_for_manuell_bokning is not None: andringar["sparrat_for_manuell_bokning"] = sparrat_for_manuell_bokning
+
+    if not andringar:
+        raise ValueError("Inga ändringar angivna.")
+
+    # Spiris_keys till domän-keys för sammanfattningen
+    _KONTO_OMVAND_ALLOWLIST = {
+        "Name": "kontonamn",
+        "IsActive": "aktiv",
+        "Type": "kontotyp",
+        "VatCodeId": "momskod_id",
+        "IsProjectAllowed": "projekt_tillatet",
+        "IsCostCenterAllowed": "kostnadsstalle_tillatet",
+        "IsBlockedForManualBooking": "sparrat_for_manuell_bokning"
+    }
+
+    sammanfattning = [
+        ["Åtgärd", "Ändra konto"],
+        ["Konto", kontonr],
+        ["Räkenskapsår", rakenskapsar_id],
+    ]
+    
+    _KONTO_ALLOWLIST = {v: k for k, v in _KONTO_OMVAND_ALLOWLIST.items()}
+    
+    for doman_nyckel, nytt_varde in andringar.items():
+        api_nyckel = _KONTO_ALLOWLIST[doman_nyckel]
+        gammalt_varde = nuvarande.get(api_nyckel)
+        
+        # Snyggare strängar
+        gammalt_str = str(gammalt_varde) if gammalt_varde is not None else "(tomt)"
+        nytt_str = str(nytt_varde) if nytt_varde is not None else "(tomt)"
+        
+        sammanfattning.append([f"Ändring {doman_nyckel}", f"{gammalt_str} ➡️ {nytt_str}"])
+
+    def _bygg():
+        payload = {
+            "rakenskapsar_id": rakenskapsar_id,
+            "kontonr": kontonr,
+            "nuvarande": nuvarande,
+            "andringar": andringar
+        }
+
+        u = utkast.skapa(
+            "kontoandring",
+            payload,
+            sammanfattning,
+        )
+        return _utkastsvar(u, f"Ändring av konto {kontonr} föreslås.")
+
+    return await _kor_utkastverktyg(
+        _bygg, ctx,
+        f"Förslag: Ändra konto {kontonr}",
+        sammanfattning,
+    )
+
+
+@mcp.tool()
+async def forbered_bokforingslas(
+    nytt_datum: str,
+    ctx: Context | None = None
+) -> dict:
+    """Förbereder en framflyttning av bokföringslåset.
+    Låset hindrar bokföring före och på det angivna datumet.
+    Åtgärden är OÅTERKALLELIG. Låset kan bara flyttas framåt, aldrig bakåt eller tas bort."""
+    
+    # 1. Hämta nuvarande
+    try:
+        nuvarande_las = await spiris_hamta_ett("bokforingslas", "enkel")
+    except Exception as e:
+        raise ValueError(f"Kunde inte hämta nuvarande bokföringslås: {e}")
+
+    nuvarande_datum = nuvarande_las.get("last_till_och_med")
+    
+    # 2. Validera
+    if not nytt_datum:
+        raise ValueError("Nytt datum får inte vara tomt. Upplåsning stöds inte.")
+
+    import datetime
+    try:
+        nytt_d = datetime.date.fromisoformat(nytt_datum)
+    except ValueError:
+        raise ValueError("Nytt datum måste ha formatet ÅÅÅÅ-MM-DD.")
+        
+    idag = datetime.date.today()
+    if nytt_d > idag:
+        raise ValueError("Nytt datum får inte ligga i framtiden.")
+        
+    if nuvarande_datum:
+        nuvarande_d = datetime.date.fromisoformat(nuvarande_datum)
+        if nytt_d <= nuvarande_d:
+            raise ValueError(f"Nytt datum ({nytt_datum}) måste vara senare än nuvarande datum ({nuvarande_datum}).")
+
+    sammanfattning = [
+        ["Åtgärd", "Ändra bokföringslås"],
+        ["OBS!", "OÅTERKALLELIGT (kan bara flyttas framåt)"],
+        ["Nuvarande låsdatum", nuvarande_datum if nuvarande_datum else "(Inget lås)"],
+        ["Nytt låsdatum", nytt_datum]
+    ]
+
+    def _bygg():
+        payload = {
+            "nytt_datum": nytt_datum
+        }
+        u = utkast.skapa(
+            "bokforingslas",
+            payload,
+            sammanfattning,
+        )
+        return _utkastsvar(u, f"Framflyttning av bokföringslås till {nytt_datum} föreslås.")
+
+    return await _kor_utkastverktyg(
+        _bygg, ctx,
+        f"Förslag: Flytta fram bokföringslås till {nytt_datum}",
+        sammanfattning,
+    )
+
+@mcp.tool()
+async def forbered_rotrut(
+    RutMaxAmountForPersBelow65Year: str | None = None,
+    RutMaxAmountForPersOver65Year: str | None = None,
+    RutReducedInvoicingPercent: str | None = None,
+    RotReducedInvoicingMaxAmount: str | None = None,
+    RotReducedInvoicingPercent: str | None = None,
+    ctx: Context | None = None
+) -> dict:
+    """Förbereder ändring av företagets ROT/RUT-inställningar.
+    Dessa inställningar styr skattereduktion mot Skatteverket. Felaktiga värden
+    ger felaktiga avdrag på utställda fakturor."""
+    
+    try:
+        nuvarande = await spiris_hamta_ett("rotrut", "enkel")
+    except Exception as e:
+        raise ValueError(f"Kunde inte hämta ROT/RUT-inställningar: {e}")
+
+    andringar = {}
+    if RutMaxAmountForPersBelow65Year is not None: andringar["RutMaxAmountForPersBelow65Year"] = RutMaxAmountForPersBelow65Year
+    if RutMaxAmountForPersOver65Year is not None: andringar["RutMaxAmountForPersOver65Year"] = RutMaxAmountForPersOver65Year
+    if RutReducedInvoicingPercent is not None: andringar["RutReducedInvoicingPercent"] = RutReducedInvoicingPercent
+    if RotReducedInvoicingMaxAmount is not None: andringar["RotReducedInvoicingMaxAmount"] = RotReducedInvoicingMaxAmount
+    if RotReducedInvoicingPercent is not None: andringar["RotReducedInvoicingPercent"] = RotReducedInvoicingPercent
+
+    if not andringar:
+        raise ValueError("Inga ändringar angivna.")
+
+    sammanfattning = [
+        ["Åtgärd", "Ändra ROT/RUT-inställningar"],
+    ]
+    
+    _validerat = {}
+    for k, v in andringar.items():
+        _d = float(_belopp(v, k))
+        if "Percent" in k:
+            if not (0 <= _d <= 100):
+                raise ValueError(f"{k} måste ligga mellan 0 och 100.")
+        else:
+            if _d <= 0:
+                raise ValueError(f"{k} måste vara > 0.")
+        _validerat[k] = _d
+        
+        gammalt = nuvarande.get(k)
+        sammanfattning.append([f"Ändring {k}", f"{gammalt} ➡️ {_d}"])
+
+    def _bygg():
+        payload = {
+            "nuvarande": nuvarande,
+            "andringar": _validerat
+        }
+        u = utkast.skapa(
+            "rotrut",
+            payload,
+            sammanfattning,
+        )
+        return _utkastsvar(u, f"Ändring av ROT/RUT-inställningar föreslås.")
+
+    return await _kor_utkastverktyg(
+        _bygg, ctx,
+        "Förslag: Ändra ROT/RUT-inställningar",
+        sammanfattning,
+    )
