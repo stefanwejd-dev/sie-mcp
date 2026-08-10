@@ -126,6 +126,8 @@ SPIRIS_ARGUMENT: dict[str, tuple] = {
     "spiris_hamta_underlag": ("123",),
     "spiris_periodiseringar": (),
     "spiris_bokforingslas": (),
+    "spiris_verifikation": ("fy-1", "v-1"),
+    "spiris_bankhandelse": ("b-1", "t-1"),
 }
 
 _SPIRISFUNKTIONER = {
@@ -180,7 +182,8 @@ _SPIRISFUNKTIONER = {
     "spiris_prislistor": server_modul.spiris_prislistor,
     "spiris_rabattavtal": server_modul.spiris_rabattavtal,
     "spiris_etiketter": server_modul.spiris_etiketter,
-
+    "spiris_verifikation": server_modul.spiris_verifikation,
+    "spiris_bankhandelse": server_modul.spiris_bankhandelse,
     "spiris_bokforingslas": spiris_bokforingslas,
 }
 

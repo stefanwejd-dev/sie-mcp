@@ -185,3 +185,11 @@ utvecklaren.
     *   **R16.4**: Lagt till verktygen i MCP-servern (`mcp_server/server.py`) bakom `_kor_spiris_verktyg` så att de skyddas av användargodkännande.
     *   **R16.5**: Uppdaterat testsviterna (`test_mcp_lasande_bredd.py` och `test_mcp_villkorssparr.py`) och skapat separata tester i `test_etapp16_strukturer.py`.
 *   **Resultat**: 206/206 tester gröna.
+
+### 2026-08-10 (Etapp 17 - Småplock)
+*   **Status**: IMPLEMENTERAT & REDO FÖR GRIND 17.
+*   **Ändringar**:
+    *   **U17.1**: Implementerat `spiris_verifikation` som hämtar en specifik verifikation (`GET /vouchers/{fy}/{id}`) och maskerar fritexten (KATEGORI_HUVUDBOK).
+    *   **U17.2**: Implementerat `spiris_bankhandelse` som hämtar en specifik bankhändelse (`GET /banktransactions/{account}/{id}`).
+    *   **RAG**: Båda verktygen ligger bakom `_kor_spiris_verktyg` i servern och skyddas av Villkorsspärren.
+*   **Resultat**: 2244/2244 tester gröna.

@@ -78,7 +78,7 @@ from mcp_server.server import (
     spiris_underlag,
     spiris_hamta_underlag, spiris_offertutkast, spiris_bokforingslas,
     spiris_kvittningskandidater,
-    spiris_prislistor, spiris_rabattavtal, spiris_etiketter,
+    spiris_prislistor, spiris_rabattavtal, spiris_etiketter, spiris_verifikation, spiris_bankhandelse,
 )
 
 _COMPANY = {"Name": "Testbolag AB", "CorporateIdentityNumber": "556677-8899",
@@ -175,6 +175,21 @@ class _FejkKlient:
             return {"Id": "123", "FileName": "test.pdf", "FileContext": "context"}
         if path.startswith("/customers/"):
             return {"CustomerName": "Anna Andersson", "Email": "anna@example.com"}
+        if path.startswith("/vouchers/"):
+            return {
+                "Id": "v-1", "VoucherDate": "2026-07-06", "VoucherText": "En verifikation med Anna Andersson",
+                "Rows": [
+                    {"AccountNumber": 1930, "DebitAmount": 1000, "CreditAmount": 0, "TransactionText": "Radtext"},
+                    {"AccountNumber": 3000, "DebitAmount": 0, "CreditAmount": 1000, "TransactionText": ""},
+                ],
+                "NumberAndNumberSeries": "A12", "NumberSeries": "A", "VoucherType": 1,
+                "CreatedUtc": "2026-07-06T10:00:00.00Z", "ModifiedUtc": "2026-07-06T10:00:00.00Z"
+            }
+        if path.startswith("/banktransactions/"):
+            return {
+                "Id": "t-1", "BankAccountId": "b-1", "Amount": 100.5, "TransactionDate": "2026-08-10T12:00:00",
+                "Description": "Test betalning", "Reference": "INV-123", "MatchId": "m-1"
+            }
         raise AssertionError(f"oväntad hamta_en: {path}")
 
     def hamta_alla(self, path, params=None, **kwargs):
@@ -295,6 +310,8 @@ ALLA_SPIRISVERKTYG = {
     "spiris_prislistor": lambda: spiris_prislistor(),
     "spiris_rabattavtal": lambda: spiris_rabattavtal(),
     "spiris_etiketter": lambda: spiris_etiketter("kund"),
+    "spiris_verifikation": lambda: spiris_verifikation("fy-1", "v-1"),
+    "spiris_bankhandelse": lambda: spiris_bankhandelse("b-1", "t-1"),
 }
 
 

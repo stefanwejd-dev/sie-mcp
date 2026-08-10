@@ -3322,3 +3322,15 @@ async def spiris_etiketter(typ: str) -> dict:
         typ: Måste vara antingen "kund" eller "artikel".
     """
     return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_etiketter(k, typ), KATEGORI_STRUKTUR)
+
+
+@mcp.tool()
+async def spiris_verifikation(rakenskapsar_id: str, verifikation_id: str) -> dict:
+    """Hämtar en specifik verifikation (KATEGORI_HUVUDBOK)."""
+    return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_en_verifikation(k, rakenskapsar_id, verifikation_id), KATEGORI_HUVUDBOK)
+
+
+@mcp.tool()
+async def spiris_bankhandelse(bankkonto_id: str, handelse_id: str) -> dict:
+    """Hämtar en specifik bankhändelse (KATEGORI_HUVUDBOK)."""
+    return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_en_bankhandelse(k, bankkonto_id, handelse_id), KATEGORI_HUVUDBOK)

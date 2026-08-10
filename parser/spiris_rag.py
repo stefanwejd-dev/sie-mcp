@@ -949,3 +949,48 @@ def hamta_etiketter(k, typ: str) -> list[dict]:
             "Description": r.get("Description"),
         })
     return res
+
+def hamta_en_verifikation(k, rakenskapsar_id: str, verifikation_id: str) -> dict:
+    """U17.1 — spiris_verifikation"""
+    if not rakenskapsar_id or not verifikation_id:
+        raise ValueError("Både rakenskapsar_id och verifikation_id måste anges")
+    
+    rå = k.hamta_en(f"/vouchers/{rakenskapsar_id}/{verifikation_id}")
+    ver = mappa_verifikation(rå)
+    
+    företag = k.hamta_en("/companysettings")
+    sie = SIEFil(
+        företagsnamn=företag.get("Name", ""),
+        orgnr=företag.get("CorporateIdentityNumber"),
+        verifikationer=[ver],
+    )
+    resultat = maskera_siefil(sie, referenslista=las_namnreferens())
+    
+    if not resultat.sandningsbara_verifikationer:
+        return {"maskerad": True, "vertext": "[DOLD: Säkerhetsskäl - helt blockerad]"}
+
+    v = resultat.sandningsbara_verifikationer[0]
+    return {
+        "serie": v.serie,
+        "vernr": v.vernr,
+        "verdatum": str(v.verdatum),
+        "vertext": v.vertext,
+        "rader": [{"kontonr": r.kontonr, "belopp": str(r.belopp), "transtext": r.transtext} for r in v.transaktioner]
+    }
+
+
+def hamta_en_bankhandelse(k, bankkonto_id: str, handelse_id: str) -> dict:
+    """U17.2 — spiris_bankhandelse"""
+    if not bankkonto_id or not handelse_id:
+        raise ValueError("Både bankkonto_id och handelse_id måste anges")
+        
+    rå = k.hamta_en(f"/banktransactions/{bankkonto_id}/{handelse_id}")
+    return {
+        "Id": rå.get("Id"),
+        "BankAccountId": rå.get("BankAccountId"),
+        "Amount": str(rå.get("Amount")) if rå.get("Amount") is not None else None,
+        "TransactionDate": rå.get("TransactionDate"),
+        "Description": rå.get("Description"),
+        "Reference": rå.get("Reference"),
+        "MatchId": rå.get("MatchId")
+    }
