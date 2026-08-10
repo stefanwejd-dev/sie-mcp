@@ -2198,8 +2198,7 @@ async def forbered_underlagskoppling(
         _bygg, ctx, f"Förslag: koppla bilaga", sammanfattning
     )
 
-if __name__ == "__main__":
-    mcp.run()
+
 
 # --- ALIASER (FAS 6: Domndrivet sprk) ---
 
@@ -3334,3 +3333,11 @@ async def spiris_verifikation(rakenskapsar_id: str, verifikation_id: str) -> dic
 async def spiris_bankhandelse(bankkonto_id: str, handelse_id: str) -> dict:
     """Hämtar en specifik bankhändelse (KATEGORI_HUVUDBOK)."""
     return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_en_bankhandelse(k, bankkonto_id, handelse_id), KATEGORI_HUVUDBOK)
+
+# Startblocket MÅSTE ligga sist i filen. mcp.run() återvänder aldrig — allt
+# som definieras efter det anropet registreras aldrig när servern körs som
+# __main__, bara när modulen importeras (t.ex. av testsviten). Ett verktyg som
+# hamnar under den här raden är osynligt för varje riktig klient, och sviten
+# blir grön ändå. Uppmätt 2026-08-10: 62 av 125 verktyg nådde klienten.
+if __name__ == "__main__":
+    mcp.run()

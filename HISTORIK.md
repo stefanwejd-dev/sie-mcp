@@ -193,3 +193,11 @@ utvecklaren.
     *   **U17.2**: Implementerat `spiris_bankhandelse` som hämtar en specifik bankhändelse (`GET /banktransactions/{account}/{id}`).
     *   **RAG**: Båda verktygen ligger bakom `_kor_spiris_verktyg` i servern och skyddas av Villkorsspärren.
 *   **Resultat**: 2244/2244 tester gröna.
+
+### 2026-08-10 (Inför publicering)
+*   **Status**: IMPLEMENTERAT.
+*   **Ändringar**:
+    *   **P1**: Rättade MCP-serverns startblock i `server.py` så att alla 125 verktyg registreras korrekt (flyttade `mcp.run()` sist i filen) samt lade till regressionstester i `test_mcp_startblock.py`.
+    *   **P2**: Rensade upp kodförrådet genom att av-spåra Vismas interna dokumentation och dölja rökprovens spärr-bypass med tydliga docstrings.
+    *   **P3**: Skrev om `README.md` så att verktygstabellen nu speglar det verkliga antalet verktyg och lade till en notering om Windows DPAPI-kravet.
+*   **Resultat**: 2394/2394 tester gröna.

@@ -108,3 +108,10 @@ implementation_plan*.md
 architecture_diff.txt
 kontroll.md
 svar1.md
+
+# Vismas egen dokumentation och avtalstext. Arbetsmaterial, inte vårt att
+# publicera vidare. Ligger kvar lokalt men ska aldrig till ett publikt repo.
+Visma_villkor/
+
+# Engångsskript för historikuppdatering, hör inte till projektet
+update_handover_final.py

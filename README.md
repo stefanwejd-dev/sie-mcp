@@ -36,6 +36,10 @@ Verktyget läser SIE4-bokföringsfiler och/eller ansluter mot affärssystem (t.e
 
 ### 1. Installation
 
+> **Spiris-anslutningen kräver Windows.** OAuth-sessionen skyddas med Windows
+> DPAPI (per användare) och har medvetet ingen fallback på andra plattformar —
+> en osäker lagring vore värre än ingen. SIE4-vägen är inte beroende av detta.
+
 ```bash
 python -m venv .venv
 .venv\Scripts\activate  # Windows
@@ -68,21 +72,21 @@ data lämnar datorn.
 
 ### 4. Kör som MCP-server
 
-MCP-servern (`mcp_server/server.py`) exponerar 54 primära verktyg över `stdio` — 37 läsande, 16 som föreslår åtgärder utan att utföra dem, och `visa_anvandarvillkor` (samt 31 domänspecifika alias, totalt 85). Alla är spärrade tills villkoren godkänts enligt steg 2; `visa_anvandarvillkor` går alltid att anropa och visar villkoren.
+MCP-servern (`mcp_server/server.py`) exponerar 88 primära verktyg över `stdio` — 56 läsande, 31 som föreslår åtgärder utan att utföra dem, och `visa_anvandarvillkor` (samt 37 domänspecifika alias, totalt 125). Dessutom tillhandahålls 3 resurser, 1 resursmall och 5 prompter. Alla är spärrade tills villkoren godkänts enligt steg 2; `visa_anvandarvillkor` går alltid att anropa och visar villkoren.
 
 När den godkänts loggas varje anrop, med alla argument, automatiskt i `.system_generated/logs/` (eller den sökväg `SIE_MCP_LOGGKATALOG` pekar på). Du kan även följa trafiken i realtid i appens loggflik.
 
-| Grupp | Verktyg |
-|---|---|
-| SIE4-filer | `berakna_vasentlighet`, `granska_kontotyper` |
-| Struktur | `rakenskapsar`, `kontoplan`, `artiklar`, `foretagsinfo`, `bankkonton`, `momskoder` |
-| Huvudbok | `kontosaldon`, `kontotransaktioner`, `sok_verifikationer` |
-| Rapporter | `resultatrapport`, `balansrapport`, `kassaflodesanalys`, `dashboard` |
-| Reskontra | `leverantorsreskontra`, `kundreskontra`, `kundbetalbeteende`, `likviditetsprognos` |
-| Affärsdokument | `leverantorsfakturor`, `order`, `offerter` |
-| Moms | `momsrapporter` (inlämnade), `momsoversikt` (beräknad — **inte** en deklaration) |
-| Förslag | `forbered_kund`, `forbered_kundfaktura`, `forbered_verifikat`, `kontrollera_utkast` |
-| Villkor | `visa_anvandarvillkor` |
+Klienten (Claude Desktop e.dyl.) listar automatiskt alla verktyg när servern ansluts. Verktygen är indelade i följande logiska grupper:
+
+* **SIE4-filer:** Beräkningar och analyser.
+* **Struktur & Register:** Kontoplan, räkenskapsår, artiklar, företagsinfo, bankkonton m.m.
+* **Huvudbok & Rapporter:** Saldon, transaktioner, verifikat och finansiella rapporter.
+* **Reskontra & Affärsdokument:** Kund-/leverantörsreskontra, fakturor, order och offerter.
+* **Moms:** Momsöversikt och rapporter.
+* **Masterdata:** Prislistor, rabattavtal och etiketter.
+* **Förslag (Utkastvägen):** `forbered_*`-verktyg för att skapa fakturor, bokföra, kvitta betalningar, ändra kontoplan, periodisera och hantera bokföringslås. Dessa utför ingenting, utan lägger utkast för mänsklig granskning.
+* **Villkor:** `visa_anvandarvillkor` för att läsa avtalet.
+
 
 **Inga skrivande verktyg exponeras över MCP.** `forbered_*`-verktygen skriver ingenting — de lägger ett *förslag* i en lokal kö. Förslaget utförs först när du själv har granskat de verkliga uppgifterna i appens flik **Åtgärder** och tryckt "Godkänn och skicka". MCP-servern kan alltså föreslå men aldrig utföra, och dess källkod refererar inte ens skrivfunktionerna.
 
