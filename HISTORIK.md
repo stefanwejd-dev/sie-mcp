@@ -201,3 +201,15 @@ utvecklaren.
     *   **P2**: Rensade upp kodförrådet genom att av-spåra Vismas interna dokumentation och dölja rökprovens spärr-bypass med tydliga docstrings.
     *   **P3**: Skrev om `README.md` så att verktygstabellen nu speglar det verkliga antalet verktyg och lade till en notering om Windows DPAPI-kravet.
 *   **Resultat**: 2394/2394 tester gröna.
+
+---
+
+## 2026-08-10 — Arkitekturunderlag, publiceringsgranskning och riskregister
+
+*   **Status**: DOKUMENTATION.
+*   **Ändringar**:
+    *   `ARCHITECTURE.md`: nytt daterat tillägg om Spiris-täckningen efter Etapp 0–17 (91 av 161 anropbara sökvägar, 57 %), startblocksinvarianten, mönstret "grön svit men trasig produkt", den öppna distributionsfrågan och den planerade installationsarkitekturen. Anger uttryckligen vad i §4b, §7 och §8 som därmed är föråldrat.
+    *   `RISKREGISTER.md`: **R-17** (verifieringsmetoden — tre fel i rad har funnits i en helt grön svit; felen åtgärdade, verifieringsluckan kvarstår) och **R-18** (produktionsåtkomst och distributionsmodell — BYOK kräver att varje användare själv ansöker hos Visma).
+    *   Nya arkitektur- och planeringsdokument: `ARKITEKTUR_SPIRIS_TACKNING.md`, `PLAN_SPIRIS_TACKNING.md`, `PLAN_SPIRIS_ETAPP8.md`, `ARKITEKTUR_INSTALLATION.md`, `PLAN_INSTALLATION.md`, `PLAN_INFOR_PUBLICERING.md`.
+    *   `tools/prov_grind10.py`: sandbox-prov för landsspärrar och kvittningsvägen, med samma torrkörningsmönster som `migrera_lagring.py`.
+*   **Resultat**: 2394 tester gröna, 1 skip. Startblocksrättningen verifierad: 125 av 125 verktyg registrerade när `mcp.run()` anropas.

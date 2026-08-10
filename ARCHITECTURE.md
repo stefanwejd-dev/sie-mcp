@@ -2102,3 +2102,144 @@ Under rummet "AI-chattar" har AI-fokuserade rum samlats.
 
 ### Register-bugg och State Management (2026-08-06)
 Efter Etapp 2 upptäcktes buggar där 'Register'-rummet antingen hängde eller visade tomma tabeller ('Antal 0') trots aktiva datakällor. Felet låg i en tyst krasch under initieringen av Spiris-klienten (felaktigt metodanrop ladda() istället för las_config()) kombinerat med ett stavfel i state-variabeln (spiris_token istället för spiris_tokens). Eftersom felen svaldes (xcept Exception: pass) blev klient=None, vilket ledde till att registren antingen cachades som tomma listor [] eller varnade. Genom att tvinga fram ett loggat fel och korrigera variabelnamnen har state-hanteringen för Spiris-klienten blivit robust.
+
+---
+
+# Tillägg 2026-08-10 — täckning, distribution och startblocksinvarianten
+
+Det här avsnittet är skrivet efter Etapp 0–17 i `PLAN_SPIRIS_TACKNING.md` och
+`PLAN_SPIRIS_ETAPP8.md`, samt publiceringsförberedelserna i
+`PLAN_INFOR_PUBLICERING.md`. Det **ersätter** delar av §4b, §7 och §8 — se
+punkt 6 sist.
+
+## 1. Spiris-täckningen efter Etapp 0–17
+
+Mätt mot `https://eaccountingapi.vismaonline.com/openapi/v2.json`:
+
+| Mått | Värde |
+|---|---|
+| Anropbara sökvägar i specen (normaliserade) | 161 |
+| Sökvägar `spiris_adapter.py` rör | **91** |
+| Täckning | **57 %** |
+
+Måttet är *sökvägar*, inte operationer, och är därför inte direkt jämförbart
+med de 31 % **operationer** som mättes 2026-08-09 i
+`ARKITEKTUR_SPIRIS_TACKNING.md`. Riktningen är däremot entydig: transportlagret
+har fått OData-filtrering, 429-hantering och binärhämtning; utkastvägen är hel
+(skapa → läsa → ändra → radera → bokföra); periodiseringar, bilagor,
+kontoplansunderhåll, bokföringslås, ROT/RUT, kvittning, offertutkast,
+prislistor och etiketter finns.
+
+MCP-ytan är nu **125 verktyg, 3 resurser, 1 resursmall och 5 prompter**.
+Resurser och prompter fanns inte alls före Etapp 6.
+
+Medvetet ej byggt, med skäl i `PLAN_SPIRIS_ETAPP8.md` avsnitt 3:
+`/messagethreads`, `/appstore`, `/partnerresourcelinks`, `/banks`,
+`/backgrounds`, `POST /quotes`, `POST /orders`, samt de fyra operationer som
+enligt specens egna beskrivningar inte finns för svenska bolag — däribland
+`POST /paymentvoucher` (endast norska och nederländska bolag).
+
+## 2. Startblocksinvarianten
+
+`mcp_server/server.py` hade fram till 2026-08-10 sitt startblock mitt i filen:
+
+```python
+if __name__ == "__main__":
+    mcp.run()
+```
+
+`mcp.run()` återvänder aldrig. Allt som definierades efter anropet
+registrerades därför **bara vid import** — alltså i testsviten — och aldrig när
+servern faktiskt kördes. Uppmätt före rättningen: **62 av 125 verktyg** nådde
+en klient. De 63 som föll bort var i praktiken hela utfallet av Etapp 8–17,
+samtliga domänalias och båda juridikverktygen.
+
+Invarianten, som gäller framåt:
+
+> **Startblocket ligger sist i `server.py`.** Ett verktyg, en resurs eller en
+> prompt som definieras under det anropet är osynlig för varje riktig klient,
+> och testsviten blir grön ändå.
+
+Regressionsskyddet är `tests/test_mcp_startblock.py` (3 tester): modulen körs
+med `runpy` under namnet `__main__` med `FastMCP.run` ersatt, och antalet
+registrerade verktyg, resurser och prompter i det ögonblicket jämförs med
+antalet efter full körning. Talen ska vara lika.
+
+## 3. Mönstret: grön svit, trasig produkt
+
+Startblocket är det tredje felet av samma slag på kort tid:
+
+| Fel | Varför sviten missade det |
+|---|---|
+| Periodiseringens skrivväg saknade gren i `utfor_utkast` | Testerna prövade `forbered_*`, aldrig vägen från godkännande till Spiris |
+| `forbered_underlagskoppling` gick förbi villkorsspärren | Metatestet listade verktyget som täckt utan att pröva spärren |
+| Startblocket | Testerna **importerar** modulen; guarden hoppas då över |
+
+Samtliga tre fanns i en helt grön svit. Slutsatsen är inte att fler enhetstester
+behövs, utan att sviten mäter fel sak i tre avseenden: den kör aldrig servern
+som en klient gör, den följer aldrig en åtgärd hela vägen från utkast till
+Spiris, och en metatests täckningsmängd kan tystas i stället för att uppfyllas.
+
+Rökproven mot sandbox täcker API-anropen. Ingen grind har hittills täckt
+**processen** — att starta servern och räkna vad en klient faktiskt ser. Den
+grinden bör införas i kommande planer.
+
+## 4. Distributionsfrågan — öppen
+
+En arkitekturfråga som saknar svar, och som avgör vem produkten är till för.
+
+Spiris eAccounting-API behandlar klienter som *konfidentiella*: token-växlingen
+kräver `client_secret` (se `spiris_auth_vy.vaxla_kod_mot_token`). En hemlighet
+kan inte hållas hemlig i ett program som installeras hos användaren och
+publiceras som öppen källkod. Det ger tre möjliga modeller:
+
+| Modell | Registrering | Server hos oss? | Friktion |
+|---|---|---|---|
+| **BYOK (nuvarande, N1)** | Varje användare | Nej | Hög — användaren måste bli Visma-utvecklare och ansöka om produktionsåtkomst |
+| Broker | Quiet Numbers | Ja — ser tokens och data | Låg |
+| Publik klient | Quiet Numbers | Nej | Låg — **men kräver Vismas medgivande** |
+
+Jämförelsen med marknaden 2026-08-10: Vismas **egen** MCP (`mcp.spiris.se`)
+löser det genom en separat auktorisationsserver (`auth.mcp.spiris.se`) med
+`token_endpoint_auth_methods_supported: ["none"]`, PKCE och dynamisk
+klientregistrering — alltså publika klienter utan hemlighet. `fellow-spiris`
+löser det med en broker. `spiris-rust` är ett bibliotek och skjuter frågan
+vidare. **Ingen löser det som en lokalt installerad app med användarens egna
+uppgifter.**
+
+Att Visma behövde bygga en ny auktorisationsserver för sin egen MCP är den
+starkaste indikationen på att `identity.vismaonline.com` inte tillåter publika
+klienter.
+
+Konsekvens så länge frågan är obesvarad: sandbox fungerar för alla, men
+**produktionsdata kräver att varje användare själv ansöker hos Visma**. Det
+begränsar målgruppen till den som är beredd att göra det — och gör
+maskeringen, utkastgrinden och det lokala utförandet till produktens skäl att
+finnas, inte dess bekvämlighet.
+
+Frågan ställs till `api@spiris.se` tillsammans med ansökan om
+produktionsåtkomst.
+
+## 5. Installationsarkitekturen — planerad, ej byggd
+
+`ARKITEKTUR_INSTALLATION.md` och `PLAN_INSTALLATION.md` beskriver hur de tolv
+stegen från nedladdning till fungerande MCP ska bli fyra: per-användarinstaller
+utan UAC, guiden som ett nytt rum i Streamlit-appen, lokal OAuth-lyssnare i
+stället för manuell URL-inklistring, och automatisk inskrivning i
+`claude_desktop_config.json` med säkerhetskopia.
+
+Ingenting av det är byggt. Etapp A är dessutom spärrad av en kontrollfråga:
+godtar Spiris registreringsformulär `http://localhost` som callback, eller
+krävs `https`? Att en giltig session finns i dag bevisar att **https-varianten
+fungerar** — den öppna frågan gäller bara om http vore enklare.
+
+## 6. Vad ovanstående ersätter
+
+- **§4b** beskriver åttastegsplanen från 2026-08-05. Den är genomförd; punkt 1
+  ovan är den aktuella lägesbilden.
+- **§7 Teststatus** anger 2005 gröna per 2026-08-06. Aktuellt: **2394 gröna,
+  1 skip** per 2026-08-10.
+- **§8** påstår att MCP-serverns Spiris-bootstrap är manuell och att
+  kassaflödesanalys och likviditetsprognos inte exponeras. Båda är
+  inaktuella — sessionen skapas via appens inloggning och sparas DPAPI-skyddad
+  som `secrets\.spiris_session`, och båda verktygen finns.
