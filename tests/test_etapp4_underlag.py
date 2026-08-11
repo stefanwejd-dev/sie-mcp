@@ -151,7 +151,8 @@ def test_hamta_underlag_ingen_fil_i_svaret(monkeypatch):
     from mcp_server import server
     async def mock_kor_spiris_verktyg(func, datakategori):
         k = FakeKlient(bin_data=({"FileName": "test.pdf", "ContentType": "application/pdf"}, b"content"))
-        return await func(k)
+        import inspect
+        return await func(k) if inspect.iscoroutinefunction(func) else func(k)
     monkeypatch.setattr(server, "_kor_spiris_verktyg", mock_kor_spiris_verktyg)
     
     res = asyncio.run(spiris_hamta_underlag("u1"))
@@ -171,7 +172,8 @@ def test_hamta_underlag_sparar_lokalt(monkeypatch, tmp_path):
     
     async def mock_kor_spiris_verktyg(func, datakategori):
         k = FakeKlient(bin_data=({"FileName": "test.pdf", "ContentType": "application/pdf"}, b"filecontent"))
-        return await func(k)
+        import inspect
+        return await func(k) if inspect.iscoroutinefunction(func) else func(k)
     monkeypatch.setattr(server, "_kor_spiris_verktyg", mock_kor_spiris_verktyg)
     
     res = asyncio.run(spiris_hamta_underlag("u1"))
@@ -185,7 +187,8 @@ def test_hamta_underlag_kastar_fel_vid_stor_fil(monkeypatch):
     async def mock_kor_spiris_verktyg(func, datakategori):
         # 26 MB
         k = FakeKlient(bin_data=({"FileName": "test.pdf", "ContentType": "application/pdf"}, b"0" * (26 * 1024 * 1024)))
-        return await func(k)
+        import inspect
+        return await func(k) if inspect.iscoroutinefunction(func) else func(k)
     monkeypatch.setattr(server, "_kor_spiris_verktyg", mock_kor_spiris_verktyg)
     
     with pytest.raises(SpirisKlientFel) as exc:
@@ -209,7 +212,8 @@ def test_hamta_underlag_retur_metadata(monkeypatch, tmp_path):
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
     async def mock_kor_spiris_verktyg(func, datakategori):
         k = FakeKlient(bin_data=({"FileName": "test.pdf", "ContentType": "application/pdf"}, b"filecontent"))
-        return await func(k)
+        import inspect
+        return await func(k) if inspect.iscoroutinefunction(func) else func(k)
     monkeypatch.setattr(server, "_kor_spiris_verktyg", mock_kor_spiris_verktyg)
     
     res = asyncio.run(spiris_hamta_underlag("u1"))
@@ -222,7 +226,8 @@ def test_hamta_underlag_fallback_namn(monkeypatch, tmp_path):
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
     async def mock_kor_spiris_verktyg(func, datakategori):
         k = FakeKlient(bin_data=({}, b"filecontent"))
-        return await func(k)
+        import inspect
+        return await func(k) if inspect.iscoroutinefunction(func) else func(k)
     monkeypatch.setattr(server, "_kor_spiris_verktyg", mock_kor_spiris_verktyg)
     
     res = asyncio.run(spiris_hamta_underlag("u1"))

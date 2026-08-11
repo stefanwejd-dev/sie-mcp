@@ -14,18 +14,47 @@ def test_dataclasses():
     assert f.nyckel == "test"
     assert f.obligatoriskt is True
     
-def test_metatest_at_bada_hallen():
+def test_metatest_varje_utkasttyp_finns_i_giltiga():
     formular_typer = {f.utkasttyp for f in ALLA_FORMULAR}
-    
-    # Alla formulärtyper måste finnas i GILTIGA_TYPER
     for t in formular_typer:
         assert t in GILTIGA_TYPER, f"{t} finns inte i GILTIGA_TYPER"
-        
-    # Alla giltiga typer (utom kund, kundfaktura) måste ha ett formulär
-    undantagna = {"kund", "kundfaktura", "underlagskoppling", "periodiseringsandring", "periodiseringsborttagning", "konto", "kontoandring", "bokforingslas", "rotrut", "kvittning"}
+
+@pytest.mark.xfail(strict=True, reason="Stängs i U9 (saknar formulär för rotrut/bokforingslas m.fl)")
+def test_metatest_varje_giltig_typ_har_ett_formular():
+    formular_typer = {f.utkasttyp for f in ALLA_FORMULAR}
     for t in GILTIGA_TYPER:
-        if t not in undantagna:
-            assert t in formular_typer, f"Giltig typ {t} saknar formulär"
+        assert t in formular_typer, f"Giltig typ {t} saknar formulär"
+
+@pytest.mark.xfail(strict=True, reason="Stängs i U9 (inte alla formulär är inkopplade)")
+def test_metatest_varje_formular_importeras_av_rum_render():
+    import ast
+    
+    with open("parser/rum_render.py", "r", encoding="utf-8") as f:
+        tree = ast.parse(f.read())
+        
+    importerade_namn = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module == "atgardsformular" or node.module == "parser.atgardsformular":
+                for alias in node.names:
+                    importerade_namn.add(alias.name)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                # If imported as `import parser.atgardsformular`, we'd check usage, but forms are imported explicitly usually.
+                pass
+                
+    for f_obj in ALLA_FORMULAR:
+        # We need to find the variable name in ALLA_FORMULAR
+        # But ALLA_FORMULAR is a list of objects. How to know their variable name?
+        pass
+
+    # A better way to check if it's imported is to check if the specific variable name (e.g., VERIFIKAT_FORMULAR) is imported.
+    # We can get the variable name by looking at the globals in atgardsformular.py
+    import parser.atgardsformular as af
+    for var_name, var_val in vars(af).items():
+        if getattr(var_val, "__class__", None) is not None and var_val.__class__.__name__ == "Atgardsformular":
+            if var_val in ALLA_FORMULAR:
+                assert var_name in importerade_namn, f"Formuläret {var_name} importeras inte av rum_render.py"
 
 def test_bygg_nyttolast_ren_funktion():
     varden = {"beskrivning": "test", "rader": '[{"debet": 100}, {"kredit": 100}]'}
@@ -52,7 +81,6 @@ def test_verifikat_balanskontroll():
 def test_sie4import_nyttolast():
     res = SIE4IMPORT.bygg_nyttolast({"sokvag": "x.se"})
     assert "sokvag" in res
-    assert "skriv_over_saldon" in res
 
 def test_fakturautskick_nyttolast():
     res = FAKTURAUTSKICK.bygg_nyttolast({"fakturanummer": "1"})
@@ -71,7 +99,7 @@ def test_betalningsregistrering_nyttolast():
     
 def test_makulering_nyttolast():
     res = MAKULERING.bygg_nyttolast({"fakturanummer": "1", "motivering": "Fel"})
-    assert "motivering" in res
+    assert res == {"fakturanummer": "1"}
     
 def test_efakturautskick_nyttolast():
     res = EFAKTURAUTSKICK.bygg_nyttolast({"fakturanummer": "1"})

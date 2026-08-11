@@ -10,6 +10,7 @@ from .investeringskalkyl import RUM_INVESTERINGSKALKYL
 from .juridik import RUM_JURIDIK
 from .data import RUM_DATA
 from .foretagsdata import RUM_FORETAGSDATA
+from .saljdokument import RUM_SALJDOKUMENT
 
 RUM = (
     RUM_OVERSIKT,
@@ -24,4 +25,5 @@ RUM = (
     RUM_JURIDIK,
     RUM_FORETAGSDATA,
     RUM_DATA,
+    RUM_SALJDOKUMENT,
 )

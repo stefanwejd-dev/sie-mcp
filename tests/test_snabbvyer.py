@@ -281,3 +281,67 @@ def test_vydata_nya_falt_har_none_som_standard():
     assert data.verifikatutkast is None
     assert data.momsoversikt is None
     assert data.soktext == ""
+
+# --- U6.2 Snabbvyer ---
+
+def test_bygg_ingaende_balanser_fungerar():
+    from snabbvyer import bygg_ingaende_balanser
+    data = snabbvyer.Vydata(idag=IDAG, ingaende_balanser=[{"kontonr": "1930", "kontonamn": "Check", "saldo": Decimal("100")}])
+    res = bygg_ingaende_balanser(data)
+    assert res.rubrik == "Ingående balanser"
+    assert len(res.sektioner) == 1
+
+def test_bygg_kontotransaktioner_fungerar():
+    from snabbvyer import bygg_kontotransaktioner
+    data = snabbvyer.Vydata(idag=IDAG, kontotransaktioner=[{"plats": "A1", "verdatum": "2023-01-01", "transtext": "Köp", "belopp": Decimal("100")}])
+    res = bygg_kontotransaktioner(data)
+    assert res.rubrik == "Kontotransaktioner"
+    assert len(res.sektioner) == 1
+
+def test_bygg_verifikationer_alla_fungerar():
+    from snabbvyer import bygg_verifikationer_alla
+    data = snabbvyer.Vydata(idag=IDAG, verifikationer_alla=[{"serie": "A", "vernr": "1", "verdatum": "2023-01-01", "vertext": "Test", "regdatum": "2023-01-02", "rader": []}])
+    res = bygg_verifikationer_alla(data)
+    assert res.rubrik == "Verifikationer (alla år)"
+
+def test_bygg_enskilt_verifikat_fungerar():
+    from snabbvyer import bygg_enskilt_verifikat
+    data = snabbvyer.Vydata(idag=IDAG, enskilt_verifikat={"serie": "A", "vernr": "1", "verdatum": "2023-01-01", "vertext": "Test", "rader": [{"kontonr": "1930", "transtext": "Test", "belopp": Decimal("100")}]})
+    res = bygg_enskilt_verifikat(data)
+    assert "Verifikat A 1" in res.rubrik
+
+def test_bygg_periodiseringar_fungerar():
+    from snabbvyer import bygg_periodiseringar
+    data = snabbvyer.Vydata(idag=IDAG, periodiseringar=[{"kontonr": "1000", "startdatum": "2023-01-01", "antal_perioder": 12, "belopp": Decimal("100"), "kall_id": "v1"}])
+    res = bygg_periodiseringar(data)
+    assert res.rubrik == "Periodiseringar"
+
+def test_bygg_kontoplan_alla_fungerar():
+    from snabbvyer import bygg_kontoplan_alla
+    data = snabbvyer.Vydata(idag=IDAG, kontoplan_alla=[{"rakenskapsar_id": "ar1", "kontonr": "1000", "kontonamn": "Test", "kontotypstext": "Typ", "momskod_id": "m1"}])
+    res = bygg_kontoplan_alla(data)
+    assert res.rubrik == "Kontoplan (alla år)"
+
+def test_bygg_momsrapporter_fungerar():
+    from snabbvyer import bygg_momsrapporter
+    data = snabbvyer.Vydata(idag=IDAG, momsrapporter=[{"id": "1", "from_datum": "2023-01-01", "tom_datum": "2023-01-31", "status": "Klar"}])
+    res = bygg_momsrapporter(data)
+    assert res.rubrik == "Momsrapporter"
+
+def test_bygg_momskoder_fungerar():
+    from snabbvyer import bygg_momskoder
+    data = snabbvyer.Vydata(idag=IDAG, momskoder=[{"kod": "10", "namn": "Moms", "momssats_procent": 25}])
+    res = bygg_momskoder(data)
+    assert res.rubrik == "Momskoder"
+
+def test_kontotyp_avvikelser_sager_ifran_om_inga_typer():
+    from snabbvyer import bygg_kontotyp_avvikelser
+    data = snabbvyer.Vydata(
+        idag=IDAG,
+        kontotyp_avvikelser=[],
+        kontoplan=[
+            {"kontonr": "1930", "kontonamn": "Bank", "kontotyp": None}
+        ]
+    )
+    res = bygg_kontotyp_avvikelser(data)
+    assert "Kontotyper saknas i underlaget" in res.sektioner[0].beskrivning

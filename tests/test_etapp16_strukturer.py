@@ -1,7 +1,7 @@
 import pytest
 import asyncio
 
-from parser.spiris_rag import hamta_prislistor, hamta_rabattavtal, hamta_etiketter
+from parser.spiris_adapter import hamta_prislistor, hamta_rabattavtal, hamta_etiketter
 
 class MockKlient:
     def __init__(self):

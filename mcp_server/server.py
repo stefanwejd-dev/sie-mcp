@@ -2166,7 +2166,33 @@ async def spiris_hamta_underlag(underlag_id: str) -> dict:
     """Laddar ner ett underlag från Spiris (max 25 MB) och sparar det lokalt.
     Returnerar sökvägen till den sparade filen samt metadata, INTE filens innehåll.
     Detta verktyg maskerar inte innehållet inuti PDF/bilden."""
-    return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_underlag_fil(k, underlag_id), KATEGORI_UNDERLAG)
+    import asyncio
+    import platform
+    from pathlib import Path
+    
+    async def _do(k):
+        # hamta_underlag_fil returns (meta, content_bytes)
+        from parser.spiris_adapter import hamta_underlag_fil
+        meta, content = await asyncio.to_thread(hamta_underlag_fil, k, underlag_id)
+        filnamn = meta.get("FileName") or f"{underlag_id}.pdf"
+        
+        home = Path.home()
+        dl = home / "Downloads"
+        if not dl.exists():
+            dl.mkdir(parents=True)
+            
+        out = dl / filnamn
+        await asyncio.to_thread(out.write_bytes, content)
+        
+        from parser.spiris_rag import _envelope
+        return _envelope({
+            "sokvag": str(out),
+            "filnamn": filnamn,
+            "storlek_byte": len(content),
+            "filtyp": meta.get("ContentType")
+        }, antal_exkluderade=0)
+        
+    return await _kor_spiris_verktyg(_do, KATEGORI_UNDERLAG)
 
 @mcp.tool()
 async def forbered_underlagskoppling(
@@ -3304,13 +3330,13 @@ async def spiris_prislistor(prislista_id: str | None = None) -> dict:
     Om prislista_id inte anges returneras alla upplagda prislistor.
     Om prislista_id anges (från Id-fältet i en prislista) returneras alla artikelpriser i den listan.
     """
-    return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_prislistor(k, prislista_id), KATEGORI_STRUKTUR)
+    return await _kor_spiris_verktyg(lambda k: spiris_adapter.hamta_prislistor(k, prislista_id), KATEGORI_STRUKTUR)
 
 
 @mcp.tool()
 async def spiris_rabattavtal() -> dict:
     """Hämtar rabattavtal (KATEGORI_STRUKTUR)."""
-    return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_rabattavtal(k), KATEGORI_STRUKTUR)
+    return await _kor_spiris_verktyg(lambda k: spiris_adapter.hamta_rabattavtal(k), KATEGORI_STRUKTUR)
 
 
 @mcp.tool()
@@ -3320,7 +3346,7 @@ async def spiris_etiketter(typ: str) -> dict:
     Args:
         typ: Måste vara antingen "kund" eller "artikel".
     """
-    return await _kor_spiris_verktyg(lambda k: spiris_rag.hamta_etiketter(k, typ), KATEGORI_STRUKTUR)
+    return await _kor_spiris_verktyg(lambda k: spiris_adapter.hamta_etiketter(k, typ), KATEGORI_STRUKTUR)
 
 
 @mcp.tool()

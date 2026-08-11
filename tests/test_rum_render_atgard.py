@@ -29,6 +29,12 @@ class MockSt:
     def subheader(self, text):
         pass
 
+    def chat_message(self, name):
+        return MockStFormContextManager(name, False)
+
+    def write(self, *args, **kwargs):
+        pass
+
     def form(self, key, clear_on_submit=False):
         return MockStFormContextManager(key, clear_on_submit)
 
@@ -119,17 +125,31 @@ def test_rendera_atgardsformular_exakt_ett_utkast():
 def _setup_st_for_rooms(st_mock):
     sie_mock = MagicMock()
     sie_mock.verifikationer = []
-    st_mock.session_state.get.side_effect = lambda k: sie_mock if k == "sie" else (None if k == "rapportunderlag" else True)
+    def side_effect(k, default=None):
+        if k == "sie": return sie_mock
+        if k in ("rapportunderlag", "aktivt_fakturautkast"): return None
+        return default if default is not None else True
+    st_mock.session_state.get.side_effect = side_effect
     st_mock.session_state.spiris_kundreskontra = []
     st_mock.session_state.spiris_reskontra = []
 
 def test_rum_pengar_in_har_atgardsformular():
     st_mock = MockSt()
+    st_mock.session_state.aktivt_fakturautkast = None
     _setup_st_for_rooms(st_mock)
-    with patch('parser.rum_render.st', st_mock), patch('parser.snabbvy_render.rendera_snabbvyfalt'), patch('parser.snabbvy_render.injicera_snabbvy_css'), patch('parser.rum_render.rendera_atgardsformular') as mock_render_form:
+    with patch('parser.rum_render.st', st_mock), patch('parser.snabbvy_render.rendera_snabbvyfalt'), patch('parser.snabbvy_render.injicera_snabbvy_css'), patch('parser.rum_render.rendera_atgardsformular') as mock_render_form, patch('parser.app_config.las_config'):
         rendera_pengar_in()
         assert "➕ Ny åtgärd" in st_mock.expander_calls
-        assert mock_render_form.call_count == 7 # Pengar in har 7 formulär
+        assert mock_render_form.call_count == 5 # Pengar in har 5 formulär
+
+def test_rum_saljdokument_har_atgardsformular():
+    st_mock = MockSt()
+    _setup_st_for_rooms(st_mock)
+    with patch('parser.rum_render.st', st_mock), patch('parser.snabbvy_render.rendera_snabbvyfalt'), patch('parser.snabbvy_render.injicera_snabbvy_css'), patch('parser.rum_render.rendera_atgardsformular') as mock_render_form, patch('parser.app_config.las_config'):
+        from parser.rum_render import rendera_saljdokument
+        rendera_saljdokument()
+        assert "➕ Ny åtgärd" in st_mock.expander_calls
+        assert mock_render_form.call_count == 3 # Säljdokument har 3 formulär
 
 def test_rum_pengar_ut_har_atgardsformular():
     st_mock = MockSt()
@@ -137,7 +157,7 @@ def test_rum_pengar_ut_har_atgardsformular():
     with patch('parser.rum_render.st', st_mock), patch('parser.snabbvy_render.rendera_snabbvyfalt'), patch('parser.snabbvy_render.injicera_snabbvy_css'), patch('parser.rum_render.rendera_atgardsformular') as mock_render_form:
         rendera_pengar_ut()
         assert "➕ Ny åtgärd" in st_mock.expander_calls
-        assert mock_render_form.call_count == 3 # Pengar ut har 3 formulär
+        assert mock_render_form.call_count == 4 # Pengar ut har 4 formulär
 
 def test_rum_bockerna_har_atgardsformular():
     st_mock = MockSt()
@@ -145,7 +165,16 @@ def test_rum_bockerna_har_atgardsformular():
     with patch('parser.app_tillstand.ladda_bockerna_data'), patch('parser.rum_render.st', st_mock), patch('parser.snabbvy_render.rendera_snabbvyfalt'), patch('parser.snabbvy_render.injicera_snabbvy_css'), patch('parser.rum_render.rendera_atgardsformular') as mock_render_form:
         rendera_bockerna()
         assert "➕ Ny åtgärd" in st_mock.expander_calls
-        assert mock_render_form.call_count == 2 # Böckerna har 2 formulär
+        assert mock_render_form.call_count == 9 # Böckerna har 9 formulär
+
+def test_rum_bank_har_atgardsformular():
+    st_mock = MockSt()
+    _setup_st_for_rooms(st_mock)
+    with patch('parser.app_tillstand.ladda_bank_data'), patch('parser.rum_render.st', st_mock), patch('parser.snabbvy_render.rendera_snabbvyfalt'), patch('parser.snabbvy_render.injicera_snabbvy_css'), patch('parser.rum_render.rendera_atgardsformular') as mock_render_form:
+        from parser.rum_render import rendera_bank
+        rendera_bank()
+        assert "➕ Ny åtgärd" in st_mock.expander_calls
+        assert mock_render_form.call_count == 1 # Bank har 1 formulär
 
 def test_rum_register_har_atgardsformular():
     st_mock = MockSt()
@@ -153,4 +182,43 @@ def test_rum_register_har_atgardsformular():
     with patch('parser.app_tillstand.ladda_register_data'), patch('parser.rum_render.st', st_mock), patch('parser.snabbvy_render.rendera_snabbvyfalt'), patch('parser.snabbvy_render.injicera_snabbvy_css'), patch('parser.rum_render.rendera_atgardsformular') as mock_render_form:
         rendera_register()
         assert "➕ Ny åtgärd" in st_mock.expander_calls
-        assert mock_render_form.call_count == 2 # Register har 2 formulär
+        assert mock_render_form.call_count == 4 # Register har 4 formulär
+
+def test_pengar_in_anropar_fakturautkast():
+    from parser.rum_render import rendera_pengar_in
+    from unittest.mock import patch, MagicMock
+    st_mock = MagicMock()
+    st_mock.session_state.get.side_effect = lambda k, default=None: {'typ': 'faktura'} if k == 'aktivt_fakturautkast' else None
+    
+    with patch('parser.rum_render.st', st_mock), \
+         patch('parser.rum_render._rendera_fakturautkast') as mock_render, \
+         patch('app_config.las_config') as mock_cfg:
+        mock_cfg.return_value.spiris_client_id = 'id'
+        mock_cfg.return_value.spiris_client_secret = 'secret'
+        rendera_pengar_in()
+        mock_render.assert_called_once_with('id', 'secret')
+
+def test_aktivt_fakturautkast_none_ritar_inget():
+    from parser.rum_render import _rendera_fakturautkast
+    from unittest.mock import patch, MagicMock
+    st_mock = MagicMock()
+    st_mock.session_state.aktivt_fakturautkast = None
+    
+    with patch('parser.rum_render.st', st_mock):
+        _rendera_fakturautkast('id', 'secret')
+        st_mock.chat_message.assert_not_called()
+        st_mock.write.assert_not_called()
+
+def test_egen_ritare_anvands():
+    from parser.atgardsformular import Atgardsformular
+    from parser.rum_render import rendera_atgardsformular
+    from unittest.mock import MagicMock
+    
+    mock_ritare = MagicMock()
+    f = Atgardsformular('test', 'test', 'ikon', (), lambda v: v, lambda v: [], egen_ritare=mock_ritare)
+    st_mock = MagicMock()
+    
+    rendera_atgardsformular(st_mock, f)
+    mock_ritare.assert_called_once_with(st_mock)
+    st_mock.subheader.assert_not_called()
+

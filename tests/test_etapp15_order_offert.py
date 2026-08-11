@@ -112,7 +112,7 @@ def test_spiris_offertutkast_kategori(mock_klient):
 def test_forbered_offertutkast_ratt_payload(mock_klient):
     res = asyncio.run(forbered_offertutkast(
         kundnamn_eller_id="Kalle Anka",
-        rader=[{"beskrivning": "Konsult", "antal": 10, "pris": 500, "konto": "3010"}],
+        rader=[{"beskrivning": "Konsult", "antal": "10", "pris": "500", "konto": "3010"}],
         offertdatum="2026-08-01",
         forfallodatum="2026-09-01",
         valuta="SEK",
@@ -121,7 +121,7 @@ def test_forbered_offertutkast_ratt_payload(mock_klient):
         kundreferens="Sven",
         var_referens="Kalle"
     ))
-    assert "bekraftelse" in res or "utkast_id" in res or "utkast" in res
+    assert res.get("utkast_id") and res.get("utfort") is False
 
 def test_utfor_offertutkast_adapter(mock_klient):
     mock_klient.hamta_alla.side_effect = _fejk_hamta_alla
@@ -210,7 +210,7 @@ def test_forbered_offertutkast_tomma_datum(mock_klient):
         offertdatum="",
         forfallodatum=""
     ))
-    assert "bekraftelse" in res or "utkast_id" in res or "utkast" in res
+    assert res.get("utkast_id") is not None
 
 def test_forbered_offertutkast_None_valuta(mock_klient):
     res = asyncio.run(forbered_offertutkast(
@@ -220,7 +220,7 @@ def test_forbered_offertutkast_None_valuta(mock_klient):
         forfallodatum="2026-01-31",
         valuta=None
     ))
-    assert "bekraftelse" in res or "utkast_id" in res or "utkast" in res
+    assert res.get("utkast_id") is not None
 
 def test_forbered_offertutkast_felaktiga_rader(mock_klient):
     res = asyncio.run(forbered_offertutkast(
@@ -229,7 +229,7 @@ def test_forbered_offertutkast_felaktiga_rader(mock_klient):
         offertdatum="2026-01-01",
         forfallodatum="2026-01-31",
     ))
-    assert "bekraftelse" in res or "utkast_id" in res or "utkast" in res
+    assert res.get("utkast_id") is None
 
 # --- U15.3 forbered_saljdokumentutkastatgard ---
 
@@ -238,11 +238,11 @@ from parser.spiris_adapter import utfor_saljdokumentatgard, SpirisKlientFel
 
 def test_forbered_offertutkast_till_offert(mock_klient):
     res = asyncio.run(forbered_saljdokumentatgard("offertutkast", "O1", "till_offert"))
-    assert "bekraftelse" in res or "utkast_id" in res or "utkast" in res
+    assert res.get("utkast_id") and res.get("utfort") is False
 
 def test_forbered_order_till_backorder(mock_klient):
     res = asyncio.run(forbered_saljdokumentatgard("order", "OR1", "till_backorder"))
-    assert "bekraftelse" in res or "utkast_id" in res or "utkast" in res
+    assert res.get("utkast_id") and res.get("utfort") is False
 
 def test_forbered_offertutkast_ogiltig_atgard(mock_klient):
     res = asyncio.run(forbered_saljdokumentatgard("offertutkast", "O1", "godkann"))
@@ -267,7 +267,7 @@ def test_utfor_saljdokumentatgard_order_till_backorder(mock_klient):
 def test_forbered_borttagning_offertutkast(mock_klient):
     with patch("mcp_server.server.spiris_hamta_ett", return_value='{"QuoteDate": "2026-08-01", "CustomerName": "Kalle", "TotalAmount": 1000}'):
         res = asyncio.run(forbered_utkastborttagning("offertutkast", "O1"))
-        assert "bekraftelse" in res or "utkast_id" in res or "utkast" in res
+        assert res.get("utkast_id") and res.get("utfort") is False
 
 def test_utfor_borttagning_offertutkast(mock_klient):
     from parser.spiris_adapter import utfor_utkast

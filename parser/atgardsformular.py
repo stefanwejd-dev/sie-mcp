@@ -1,3 +1,5 @@
+import json
+import os
 from dataclasses import dataclass, field
 from typing import Callable, Any
 from utkast import GILTIGA_TYPER
@@ -20,12 +22,12 @@ class Atgardsformular:
     bygg_nyttolast: Callable[[dict[str, Any]], dict[str, Any]]
     bygg_sammanfattning: Callable[[dict[str, Any]], list[list[str]]]
     varning: str | None = None
+    egen_ritare: Callable[[Any], None] | None = None
 
 
 # --- BÖCKERNA ---
 
 def _verifikat_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
-    import json
     try:
         rader = json.loads(v.get("rader", "[]"))
     except json.JSONDecodeError:
@@ -71,19 +73,18 @@ VERIFIKAT = Atgardsformular(
 def _sie4import_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
     return {
         "sokvag": v.get("sokvag", ""),
-        "skriv_over_saldon": v.get("skriv_over_saldon", False),
-        "tillat_obrukade_konton": v.get("tillat_obrukade_konton", False),
-        "ignorera_varningsflaggor": v.get("ignorera_varningsflaggor", False),
-        "invertera_tecken_pa_resultat": v.get("invertera_tecken_pa_resultat", False),
+        "ingaende_balans": v.get("ingaende_balans", False),
+        "kontonamn": v.get("kontonamn", False),
+        "mappa_konton": v.get("mappa_konton", False),
+        "arsavslut": v.get("arsavslut", False),
     }
 
 def _sie4import_sammanfattning(v: dict[str, Any]) -> list[list[str]]:
     sokvag = v.get("sokvag", "")
-    import os
     if not os.path.exists(sokvag):
         raise ValueError("Filen finns inte.")
         
-    from sie_parser import parse_sie4
+    from sie4_parser import parse_sie4
     sie = parse_sie4(sokvag, tyst=True)
     if not sie.verifikationer and not sie.konton:
         raise ValueError("Filen verkar inte vara en SIE4-fil (saknar verifikationer och konton).")
@@ -103,10 +104,10 @@ SIE4IMPORT = Atgardsformular(
     ikon="📥",
     falt=(
         Falt("sokvag", "Sökväg till SIE4-fil", "text"),
-        Falt("skriv_over_saldon", "Skriv över saldon", "kryss", obligatoriskt=False),
-        Falt("tillat_obrukade_konton", "Tillåt obrukade konton", "kryss", obligatoriskt=False),
-        Falt("ignorera_varningsflaggor", "Ignorera varningsflaggor", "kryss", obligatoriskt=False),
-        Falt("invertera_tecken_pa_resultat", "Invertera tecken på resultat", "kryss", obligatoriskt=False),
+        Falt("ingaende_balans", "Ingående balans", "kryss", obligatoriskt=False),
+        Falt("kontonamn", "Importera kontonamn", "kryss", obligatoriskt=False),
+        Falt("mappa_konton", "Mappa konton", "kryss", obligatoriskt=False),
+        Falt("arsavslut", "Årsavslut", "kryss", obligatoriskt=False),
     ),
     bygg_nyttolast=_sie4import_nyttolast,
     bygg_sammanfattning=_sie4import_sammanfattning,
@@ -174,7 +175,7 @@ def _betalningsregistrering_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
         "fakturanummer": v.get("fakturanummer", ""),
         "belopp": float(v.get("belopp") or 0),
         "betaldatum": v.get("betaldatum", ""),
-        "bankkonto": v.get("bankkonto", ""),
+        "bankkonto_id": v.get("bankkonto_id", ""),
     }
 
 def _betalningsregistrering_sammanfattning(v: dict[str, Any]) -> list[list[str]]:
@@ -197,11 +198,13 @@ BETALNINGSREGISTRERING = Atgardsformular(
 def _makulering_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
     return {
         "fakturanummer": v.get("fakturanummer", ""),
-        "motivering": v.get("motivering", ""),
     }
 
 def _makulering_sammanfattning(v: dict[str, Any]) -> list[list[str]]:
-    return [["Fakturanummer", str(v.get("fakturanummer", ""))]]
+    res = [["Fakturanummer", str(v.get("fakturanummer", ""))]]
+    if str(v.get("motivering", "")).strip():
+        res.append(["Motivering", str(v.get("motivering", "")).strip()])
+    return res
 
 MAKULERING = Atgardsformular(
     utkasttyp="makulering",
@@ -239,7 +242,7 @@ EFAKTURAUTSKICK = Atgardsformular(
 def _saljdokumentutskick_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
     return {
         "dokumenttyp": v.get("dokumenttyp", ""),
-        "nummer_eller_id": v.get("nummer_eller_id", ""),
+        "nummer": v.get("nummer", ""),
         "amne": v.get("amne", ""),
         "meddelande": v.get("meddelande", ""),
     }
@@ -265,7 +268,7 @@ SALJDOKUMENTUTSKICK = Atgardsformular(
 def _saljdokumentatgard_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
     return {
         "dokumenttyp": v.get("dokumenttyp", ""),
-        "nummer_eller_id": v.get("nummer_eller_id", ""),
+        "nummer": v.get("nummer", ""),
         "atgard": v.get("atgard", ""),
     }
 
@@ -287,6 +290,36 @@ SALJDOKUMENTATGARD = Atgardsformular(
     varning="Konverteringen kan inte ångras."
 )
 
+def _offertutkast_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kundnamn": v.get("kundnamn", ""),
+        "rader": v.get("rader", []),
+        "offertdatum": v.get("offertdatum", ""),
+        "forfallodatum": v.get("forfallodatum", ""),
+        "var_referens": v.get("var_referens", ""),
+        "leveransdatum": v.get("leveransdatum", ""),
+        "valuta": v.get("valuta", "SEK"),
+        "inkl_moms": v.get("inkl_moms", False),
+        "kundreferens": v.get("kundreferens", ""),
+    }
+
+def _offertutkast_sammanfattning(v: dict[str, Any]) -> list[list[str]]:
+    return [["Kundnamn", str(v.get("kundnamn", ""))]]
+
+OFFERTUTKAST_FORMULAR = Atgardsformular(
+    utkasttyp="offertutkast",
+    rubrik="Offertutkast",
+    ikon="🧾",
+    falt=(
+        Falt("kundnamn", "Kundnamn", "text"),
+        Falt("offertdatum", "Offertdatum", "datum"),
+        Falt("forfallodatum", "Förfallodatum", "datum"),
+        Falt("rader", "Rader", "text"),
+    ),
+    bygg_nyttolast=_offertutkast_nyttolast,
+    bygg_sammanfattning=_offertutkast_sammanfattning
+)
+
 # --- PENGAR UT ---
 
 def _leverantorsfakturautkast_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
@@ -302,12 +335,11 @@ def _leverantorsfakturautkast_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Rader måste vara giltig JSON.")
         
     return {
-        "leverantor": v.get("leverantor", ""),
+        "leverantor_id": v.get("leverantor_id", ""),
         "fakturanummer": v.get("fakturanummer", ""),
-        "datum": v.get("datum", ""),
+        "fakturadatum": v.get("fakturadatum", ""),
         "forfallodatum": v.get("forfallodatum", ""),
         "totalbelopp": float(v.get("totalbelopp") or 0),
-        "kreditflagga": v.get("kreditflagga", False),
         "rader": rader,
     }
 
@@ -336,7 +368,7 @@ def _leverantorsbetalning_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
         "faktura": v.get("faktura", ""),
         "belopp": float(v.get("belopp") or 0),
         "betaldatum": v.get("betaldatum", ""),
-        "bankkonto": v.get("bankkonto", ""),
+        "bankkonto_id": v.get("bankkonto_id", ""),
     }
 
 def _leverantorsbetalning_sammanfattning(v: dict[str, Any]) -> list[list[str]]:
@@ -421,7 +453,6 @@ def _masterdataborttagning_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
     return {
         "objekttyp": v.get("objekttyp", ""),
         "objekt_id": v.get("objekt_id", ""),
-        "motivering": v.get("motivering", ""),
     }
 
 def _masterdataborttagning_sammanfattning(v: dict[str, Any]) -> list[list[str]]:
@@ -442,71 +473,95 @@ MASTERDATABORTTAGNING = Atgardsformular(
     varning="Borttagningen kan inte ångras."
 )
 
+def _utkastandring_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
+    for k in ["utkasttyp", "utkast_id", "andringar"]:
+        if k not in v: raise ValueError(f"Saknar obligatorisk nyckel: {k}")
+    return {"utkasttyp": v["utkasttyp"], "utkast_id": v["utkast_id"], "andringar": v["andringar"]}
+
 UTKASTANDRING = Atgardsformular(
     utkasttyp="utkastandring",
     rubrik="Ändra utkast",
     ikon="✏️",
     falt=(
-        Falt("utkasttyp", "Utkasttyp", "text"),
-        Falt("utkast_id", "Utkast-ID", "text"),
+        Falt("utkasttyp", "Utkasttyp", "text", True),
+        Falt("utkast_id", "Utkast-ID", "text", True),
+        Falt("andringar", "Ändringar (JSON)", "text", True),
     ),
-    bygg_nyttolast=lambda v: {"utkasttyp": v.get("utkasttyp", ""), "utkast_id": v.get("utkast_id", "")},
+    bygg_nyttolast=_utkastandring_nyttolast,
     bygg_sammanfattning=lambda v: [["Utkasttyp", str(v.get("utkasttyp", ""))]]
 )
+
+def _utkastborttagning_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
+    for k in ["utkasttyp", "utkast_id"]:
+        if k not in v: raise ValueError(f"Saknar obligatorisk nyckel: {k}")
+    return {"utkasttyp": v["utkasttyp"], "utkast_id": v["utkast_id"]}
 
 UTKASTBORTTAGNING = Atgardsformular(
     utkasttyp="utkastborttagning",
     rubrik="Ta bort utkast",
     ikon="🗑️",
     falt=(
-        Falt("utkasttyp", "Utkasttyp", "text"),
-        Falt("utkast_id", "Utkast-ID", "text"),
+        Falt("utkasttyp", "Utkasttyp", "text", True),
+        Falt("utkast_id", "Utkast-ID", "text", True),
     ),
-    bygg_nyttolast=lambda v: {"utkasttyp": v.get("utkasttyp", ""), "utkast_id": v.get("utkast_id", "")},
+    bygg_nyttolast=_utkastborttagning_nyttolast,
     bygg_sammanfattning=lambda v: [["Utkasttyp", str(v.get("utkasttyp", ""))]],
     varning="Borttagningen kan inte ångras."
 )
 
+def _utkastbokforing_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
+    for k in ["utkasttyp", "utkast_id"]:
+        if k not in v: raise ValueError(f"Saknar obligatorisk nyckel: {k}")
+    return {"utkasttyp": v["utkasttyp"], "utkast_id": v["utkast_id"]}
+
 UTKASTBOKFORING = Atgardsformular(
     utkasttyp="utkastbokforing",
     rubrik="Bokför utkast",
-    ikon="📗",
+    ikon="🔒",
     falt=(
-        Falt("utkasttyp", "Utkasttyp", "text"),
-        Falt("utkast_id", "Utkast-ID", "text"),
+        Falt("utkasttyp", "Utkasttyp", "text", True),
+        Falt("utkast_id", "Utkast-ID", "text", True),
     ),
-    bygg_nyttolast=lambda v: {"utkasttyp": v.get("utkasttyp", ""), "utkast_id": v.get("utkast_id", "")},
+    bygg_nyttolast=_utkastbokforing_nyttolast,
     bygg_sammanfattning=lambda v: [["Utkasttyp", str(v.get("utkasttyp", ""))]],
     varning="Bokföringen är oåterkallelig."
 )
 
+def _periodisering_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
+    prefix = v.get("kopplingstyp", "")
+    id_val = v.get("kopplings_id", "")
+    rad_val = v.get("kopplingsrad", "")
+    
+    res = {
+        "antal_perioder": v.get("antal_perioder", 0),
+        "startdatum": v.get("startdatum", ""),
+        "belopp": float(v.get("belopp") or 0),
+        "konto": v.get("konto", ""),
+        "VoucherId": id_val if prefix == "Voucher" else "",
+        "VoucherRow": rad_val if prefix == "Voucher" else "",
+        "SupplierInvoiceId": id_val if prefix == "SupplierInvoice" else "",
+        "SupplierInvoiceRow": rad_val if prefix == "SupplierInvoice" else "",
+        "SupplierInvoiceDraftId": id_val if prefix == "SupplierInvoiceDraft" else "",
+        "SupplierInvoiceDraftRow": rad_val if prefix == "SupplierInvoiceDraft" else "",
+    }
+    return res
+
 PERIODISERING = Atgardsformular(
     utkasttyp="periodisering",
-    rubrik="Skapa periodisering",
-    ikon="⏳",
+    rubrik="Periodisera",
+    ikon="📅",
     falt=(
-        Falt("startdatum", "Startdatum", "text"),
+        Falt("kopplingstyp", "Kopplingstyp", "text"),
+        Falt("kopplings_id", "Kopplings-ID", "text"),
+        Falt("kopplingsrad", "Kopplingsrad", "nummer"),
+        Falt("antal_perioder", "Antal perioder", "nummer"),
+        Falt("startdatum", "Startdatum", "datum"),
         Falt("belopp", "Belopp", "decimal"),
-        Falt("konto", "Periodiseringskonto", "heltal"),
-        Falt("antal_perioder", "Antal perioder", "heltal"),
-        Falt("kopplingspar", "Koppling", "text"),
+        Falt("konto", "Konto", "text"),
     ),
-    bygg_nyttolast=lambda v: {
-        "startdatum": v.get("startdatum", ""),
-        "belopp": v.get("belopp", ""),
-        "konto": v.get("konto", ""),
-        "antal_perioder": v.get("antal_perioder", ""),
-        "kopplingspar": v.get("kopplingspar", ""),
-    },
-    bygg_sammanfattning=lambda v: [
-        ["Startdatum", str(v.get("startdatum", ""))],
-        ["Belopp", str(v.get("belopp", ""))],
-        ["Konto", str(v.get("konto", ""))],
-        ["Perioder", str(v.get("antal_perioder", ""))],
-        ["Koppling", str(v.get("kopplingspar", ""))],
-    ]
+    bygg_nyttolast=_periodisering_nyttolast,
+    bygg_sammanfattning=lambda v: [["Antal", str(v.get("antal_perioder", ""))]]
 )
-
 
 def _betalningsverifikat_nyttolast(v: dict) -> dict:
     try:
@@ -546,12 +601,219 @@ BETALNINGSVERIFIKAT = Atgardsformular(
     bygg_sammanfattning=_verifikat_sammanfattning
 )
 
+def _ritare_kundfaktura(st: Any) -> None:
+    import rum_render
+    rum_render._rendera_fakturautkast_formular()
+
+KUND_FORMULAR = Atgardsformular(
+    utkasttyp="kund",
+    rubrik="Skapa kund",
+    ikon="👤",
+    falt=(),
+    bygg_nyttolast=lambda v: {},
+    bygg_sammanfattning=lambda v: [["Namn", str(v.get("Name", v.get("kundnamn", "")))]],
+    egen_ritare=lambda st: None,
+)
+
+def _kundfaktura_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
+    req = ["rader", "kundnamn", "forfallodatum", "fakturadatum"]
+    for k in req:
+        if k not in v: raise ValueError(f"Saknar obligatorisk nyckel: {k}")
+    return {k: v[k] for k in req}
+
+KUNDFAKTURA_FORMULAR = Atgardsformular(
+    utkasttyp="kundfaktura",
+    rubrik="Skapa kundfaktura",
+    ikon="📄",
+    falt=(),
+    bygg_nyttolast=_kundfaktura_nyttolast,
+    bygg_sammanfattning=lambda v: [
+        ["Kundnamn", str(v.get("kundnamn", ""))],
+        ["Fakturadatum", str(v.get("fakturadatum", ""))],
+        ["Förfallodatum", str(v.get("forfallodatum", ""))]
+    ],
+    egen_ritare=_ritare_kundfaktura,
+)
+
+
+def _ritare_kvittning(st: Any) -> None:
+    import rum_render
+    rum_render._rendera_kvittning_formular(st)
+
+def _kvittning_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kreditfaktura_id": v.get("kreditfaktura_id", ""),
+        "payload": {
+            "DebitInvoiceIds": v.get("debetfakturor", []),
+            "VoucherDate": v.get("verifikatdatum", "")
+        }
+    }
+
+def _kvittning_sammanfattning(v: dict[str, Any]) -> list[list[str]]:
+    debet_list = v.get("debetfakturor", [])
+    if isinstance(debet_list, list):
+        debet = ", ".join(map(str, debet_list))
+    else:
+        debet = str(debet_list)
+    return [
+        ["Kreditfaktura", str(v.get("kreditfaktura_id", ""))],
+        ["Debetfakturor", debet]
+    ]
+
+KVITTNING = Atgardsformular(
+    utkasttyp="kvittning",
+    rubrik="Kvittning",
+    ikon="💸",
+    falt=(),
+    bygg_nyttolast=_kvittning_nyttolast,
+    bygg_sammanfattning=_kvittning_sammanfattning,
+    varning="Kvittningen kan inte ångras.",
+    egen_ritare=_ritare_kvittning,
+)
+
+def _ritare_underlagskoppling(st: Any) -> None:
+    import rum_render
+    rum_render._rendera_underlagskoppling_formular(st)
+
+def _underlagskoppling_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
+    from spiris_adapter import bygg_underlagskopplingspayload
+    underlag_id = v.get("underlag_id", "")
+    dokument_id = v.get("dokument_id", "")
+    dokument_typ = v.get("dokument_typ", "")
+    return bygg_underlagskopplingspayload(underlag_id, dokument_id, dokument_typ)
+
+def _underlagskoppling_sammanfattning(v: dict[str, Any]) -> list[list[str]]:
+    return [
+        ["Underlag", str(v.get("underlag_id", ""))],
+        ["Kopplas till", f"{v.get('dokument_typ', '')} {v.get('dokument_id', '')}"]
+    ]
+
+UNDERLAGSKOPPLING = Atgardsformular(
+    utkasttyp="underlagskoppling",
+    rubrik="Koppla underlag",
+    ikon="🔗",
+    falt=(),
+    bygg_nyttolast=_underlagskoppling_nyttolast,
+    bygg_sammanfattning=_underlagskoppling_sammanfattning,
+    egen_ritare=_ritare_underlagskoppling,
+)
+
+def _ritare_konto(st: Any) -> None:
+    import rum_render
+    rum_render._rendera_konto_formular(st)
+
+def _konto_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
+    req = ["kontonr", "kontonamn", "rakenskapsar_id", "aktiv"]
+    for k in req:
+        if k not in v: raise ValueError(f"Saknar obligatorisk nyckel: {k}")
+    res = {k: v[k] for k in req}
+    for k in ["kontotyp", "momskod_id", "projekt_tillatet", "kostnadsstalle_tillatet", "sparrat_for_manuell_bokning"]:
+        if k in v:
+            res[k] = v[k]
+    return res
+
+def _konto_sammanfattning(v: dict[str, Any]) -> list[list[str]]:
+    return [
+        ["Kontonummer", str(v.get("kontonr", ""))],
+        ["Kontonamn", str(v.get("kontonamn", ""))],
+        ["Aktiv", "Ja" if v.get("aktiv") else "Nej"]
+    ]
+
+KONTO = Atgardsformular(
+    utkasttyp="konto",
+    rubrik="Nytt konto",
+    ikon="➕",
+    falt=(),
+    bygg_nyttolast=_konto_nyttolast,
+    bygg_sammanfattning=_konto_sammanfattning,
+    egen_ritare=_ritare_konto,
+)
+
+def _ritare_kontoandring(st: Any) -> None:
+    import rum_render
+    rum_render._rendera_kontoandring_formular(st)
+
+def _kontoandring_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
+    req = ["rakenskapsar_id", "kontonr", "nuvarande", "andringar"]
+    for k in req:
+        if k not in v: raise ValueError(f"Saknar obligatorisk nyckel: {k}")
+    return {k: v[k] for k in req}
+
+def _kontoandring_sammanfattning(v: dict[str, Any]) -> list[list[str]]:
+    return [
+        ["Kontonummer", str(v.get("kontonr", ""))],
+        ["Ändringar", str(len(v.get("andringar", {}))) + " fält"]
+    ]
+
+KONTOANDRING = Atgardsformular(
+    utkasttyp="kontoandring",
+    rubrik="Ändra konto",
+    ikon="✏️",
+    falt=(),
+    bygg_nyttolast=_kontoandring_nyttolast,
+    bygg_sammanfattning=_kontoandring_sammanfattning,
+    egen_ritare=_ritare_kontoandring,
+)
+
+def _ritare_periodiseringsandring(st: Any) -> None:
+    import rum_render
+    rum_render._rendera_periodiseringsandring_formular(st)
+
+def _periodiseringsandring_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
+    return _periodisering_nyttolast(v)
+
+def _periodiseringsandring_sammanfattning(v: dict[str, Any]) -> list[list[str]]:
+    return [
+        ["Nuvarande perioder", str(v.get("nuvarande_perioder", ""))],
+        ["Nya perioder", str(v.get("antal_perioder", ""))],
+        ["Nuvarande belopp", str(v.get("nuvarande_belopp", ""))],
+        ["Nytt belopp", str(v.get("belopp", ""))]
+    ]
+
+PERIODISERINGSANDRING = Atgardsformular(
+    utkasttyp="periodiseringsandring",
+    rubrik="Ändra periodisering",
+    ikon="✏️",
+    falt=(),
+    bygg_nyttolast=_periodiseringsandring_nyttolast,
+    bygg_sammanfattning=_periodiseringsandring_sammanfattning,
+    egen_ritare=_ritare_periodiseringsandring,
+)
+
+def _ritare_periodiseringsborttagning(st: Any) -> None:
+    import rum_render
+    rum_render._rendera_periodiseringsborttagning_formular(st)
+
+def _periodiseringsborttagning_nyttolast(v: dict[str, Any]) -> dict[str, Any]:
+    if "leverantorsfakturautkast_id" not in v:
+        raise ValueError("Saknar obligatorisk nyckel: leverantorsfakturautkast_id")
+    return {"leverantorsfakturautkast_id": v["leverantorsfakturautkast_id"]}
+
+def _periodiseringsborttagning_sammanfattning(v: dict[str, Any]) -> list[list[str]]:
+    return [
+        ["Utkast", str(v.get("leverantorsfakturautkast_id", ""))],
+        ["Antal perioder som försvinner", str(v.get("antal_perioder_som_forsvinner", ""))]
+    ]
+
+PERIODISERINGSBORTTAGNING = Atgardsformular(
+    utkasttyp="periodiseringsborttagning",
+    rubrik="Ta bort periodisering",
+    ikon="🗑️",
+    falt=(),
+    bygg_nyttolast=_periodiseringsborttagning_nyttolast,
+    bygg_sammanfattning=_periodiseringsborttagning_sammanfattning,
+    varning="Tar bort ALLA periodiseringar på utkastet. Oåterkalleligt — det finns ingen väg tillbaka.",
+    egen_ritare=_ritare_periodiseringsborttagning,
+)
+
 ALLA_FORMULAR = [
     BETALNINGSVERIFIKAT,
     VERIFIKAT, SIE4IMPORT, 
-    FAKTURAUTSKICK, BETALNINGSPAMINNELSE, BETALNINGSREGISTRERING, MAKULERING, EFAKTURAUTSKICK, SALJDOKUMENTUTSKICK, SALJDOKUMENTATGARD,
+    FAKTURAUTSKICK, BETALNINGSPAMINNELSE, BETALNINGSREGISTRERING, MAKULERING, EFAKTURAUTSKICK, SALJDOKUMENTUTSKICK, SALJDOKUMENTATGARD, OFFERTUTKAST_FORMULAR,
     LEVERANTORSFAKTURAUTKAST, LEVERANTORSBETALNING, ATTEST,
     MASTERDATAANDRING, MASTERDATABORTTAGNING,
     UTKASTANDRING, UTKASTBORTTAGNING, UTKASTBOKFORING,
-    PERIODISERING
+    PERIODISERING,
+    KUND_FORMULAR,
+    KUNDFAKTURA_FORMULAR, KVITTNING, UNDERLAGSKOPPLING, KONTO, KONTOANDRING, PERIODISERINGSANDRING, PERIODISERINGSBORTTAGNING,
 ]

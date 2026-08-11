@@ -200,6 +200,13 @@ def ladda_bockerna_data(st, klient) -> None:
     st.session_state.bockerna_momsoversikt = None
     st.session_state.bockerna_verifikatutkast = None
     
+    st.session_state.bockerna_ingaende_balanser = None
+    st.session_state.bockerna_verifikationer_alla = None
+    st.session_state.bockerna_periodiseringar = None
+    st.session_state.bockerna_kontoplan_alla = None
+    st.session_state.bockerna_momsrapporter = None
+    st.session_state.bockerna_momskoder = None
+    
     ar_id = st.session_state.get("spiris_hamtat_ar")
     if klient and ar_id:
         try:
@@ -225,6 +232,36 @@ def ladda_bockerna_data(st, klient) -> None:
                 }
                 for v in spiris_adapter.hamta_verifikatutkast(klient)
             ]
+        except Exception:
+            pass
+            
+        try:
+            st.session_state.bockerna_ingaende_balanser = spiris_adapter.hamta_ingaende_balans(klient)
+        except Exception:
+            pass
+            
+        try:
+            st.session_state.bockerna_verifikationer_alla = spiris_adapter.hamta_verifikationer_alla(klient)
+        except Exception:
+            pass
+            
+        try:
+            st.session_state.bockerna_periodiseringar = spiris_adapter.hamta_periodiseringar(klient)
+        except Exception:
+            pass
+            
+        try:
+            st.session_state.bockerna_kontoplan_alla = spiris_adapter.hamta_kontoplan_alla(klient)
+        except Exception:
+            pass
+            
+        try:
+            st.session_state.bockerna_momsrapporter = spiris_adapter.hamta_momsrapporter(klient)
+        except Exception:
+            pass
+            
+        try:
+            st.session_state.bockerna_momskoder = spiris_adapter.hamta_momskoder(klient)
         except Exception:
             pass
             

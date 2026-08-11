@@ -59,6 +59,8 @@ class Sektion:
     beskrivning: str | None = None
     tomtext: str = "Inget att visa."
     drill_typ: str | None = None  # 'leverantor' | 'kund' | None
+    dold_detalj: bool = False
+
 
 
 @dataclass(frozen=True)
@@ -97,6 +99,14 @@ class Vydata:
     verifikationer: list | None = None
     verifikatutkast: list[dict] | None = None
     momsoversikt: dict | None = None
+    ingaende_balanser: list[dict] | None = None
+    kontotransaktioner: list[dict] | None = None
+    verifikationer_alla: list[dict] | None = None
+    enskilt_verifikat: dict | None = None
+    periodiseringar: list[dict] | None = None
+    kontoplan_alla: list[dict] | None = None
+    momsrapporter: list[dict] | None = None
+    momskoder: list[dict] | None = None
     soktext: str = ""
     vasentlighet: Any = None
     kontotyp_avvikelser: list | None = None
@@ -116,6 +126,19 @@ class Vydata:
     # Drill-down: fakturor per motpart (None = inte h\u00e4mtat \u00e4n)
     leverantorsfakturor: list[dict] | None = None
     kundfakturor: list[dict] | None = None
+    prislistor: list[dict] | None = None
+    rabattavtal: list[dict] | None = None
+    etiketter: list[dict] | None = None
+    anlaggningstillgangar: list[dict] | None = None
+    foretagsinfo: dict | None = None
+    anvandare: list[dict] | None = None
+    valutakurs: dict | None = None
+    kundreskontraposter: list[dict] | None = None
+    underlag: list[dict] | None = None
+    ordrar: list[dict] | None = None
+    offerter: list[dict] | None = None
+    offertutkast: list[dict] | None = None
+
 
 
 def _kr(varde: Decimal | int | float, val: Formateringsval) -> str:
@@ -424,25 +447,248 @@ def bygg_kontotyp_avvikelser(data: Vydata) -> Snabbvyresultat:
             "motivering": a.motivering,
         })
         
+    tomtext = "Inga avvikelser hittades."
+    if data.kontoplan and all(k.get("kontotyp") is None for k in data.kontoplan):
+        tomtext = "Kontotyper saknas i underlaget — avvikelser kan inte bedömas."
+        
     return Snabbvyresultat(
         rubrik="Kontotypavvikelser",
         sektioner=[
             Sektion(
                 rubrik="Avvikelser",
-                beskrivning="Konton vars klassificering verkar avvika från standard." if rader else "Inga avvikelser hittades.",
+                beskrivning="Konton vars klassificering verkar avvika från standard." if rader else tomtext,
                 tabell=TabellBlock(
                     rubrik=None,
                     kolumner=[
-                        KolumnDef("konto", "Konto", "text"),
-                        KolumnDef("namn", "Namn", "text"),
-                        KolumnDef("forvantad", "Förväntad", "text"),
-                        KolumnDef("angiven", "Angiven", "text"),
-                        KolumnDef("motivering", "Motivering", "text"),
+                        KolumnDef(nyckel="konto", rubrik="Konto", typ="text"),
+                        KolumnDef(nyckel="namn", rubrik="Namn", typ="text"),
+                        KolumnDef(nyckel="forvantad", rubrik="Förväntad", typ="text"),
+                        KolumnDef(nyckel="angiven", rubrik="Angiven", typ="text"),
+                        KolumnDef(nyckel="motivering", rubrik="Motivering", typ="text"),
                     ],
                     rader=rader
                 ) if rader else None
             )
         ]
+    )
+
+def bygg_ingaende_balanser(data: Vydata) -> Snabbvyresultat:
+    if data.ingaende_balanser is None:
+        return _saknas("Ingående balanser", "Data")
+    rader = []
+    for b in data.ingaende_balanser:
+        rader.append({
+            "kontonr": b.get("kontonr", ""),
+            "kontonamn": b.get("kontonamn", ""),
+            "saldo": _kr(b.get("saldo", Decimal("0")), data.formateringsval)
+        })
+    return Snabbvyresultat(
+        rubrik="Ingående balanser",
+        harkomst=HARKOMST_KALLA,
+        sektioner=[Sektion(
+            rubrik="Saldon",
+            tabell=TabellBlock(
+                kolumner=[KolumnDef(nyckel="kontonr", rubrik="Konto", typ="text"), KolumnDef(nyckel="kontonamn", rubrik="Namn", typ="text"), KolumnDef(nyckel="saldo", rubrik="Saldo", typ="text")],
+                rader=rader
+            ) if rader else None,
+            tomtext="Inga ingående balanser."
+        )]
+    )
+
+def bygg_kontotransaktioner(data: Vydata) -> Snabbvyresultat:
+    if data.kontotransaktioner is None:
+        return _saknas("Kontotransaktioner", "Välj ett konto för att visa dess transaktioner.")
+    rader = []
+    for t in data.kontotransaktioner:
+        rader.append({
+            "plats": t.get("plats", ""),
+            "datum": t.get("verdatum", ""),
+            "text": t.get("transtext", ""),
+            "belopp": _kr(t.get("belopp", Decimal("0")), data.formateringsval)
+        })
+    return Snabbvyresultat(
+        rubrik="Kontotransaktioner",
+        harkomst=HARKOMST_KALLA,
+        sektioner=[Sektion(
+            rubrik="Transaktioner",
+            tabell=TabellBlock(
+                kolumner=[KolumnDef(nyckel="plats", rubrik="Verifikat", typ="text"), KolumnDef(nyckel="datum", rubrik="Datum", typ="text"), KolumnDef(nyckel="text", rubrik="Text", typ="text"), KolumnDef(nyckel="belopp", rubrik="Belopp", typ="text")],
+                rader=rader
+            ) if rader else None,
+            tomtext="Inga transaktioner hittades."
+        )]
+    )
+
+def bygg_verifikationer_alla(data: Vydata) -> Snabbvyresultat:
+    if data.verifikationer_alla is None:
+        return _saknas("Verifikationer (alla år)", "Data")
+    rader = []
+    for v in data.verifikationer_alla:
+        rader.append({
+            "serie": v.get("serie", ""),
+            "nr": str(v.get("vernr", "")),
+            "datum": str(v.get("verdatum", "")),
+            "text": v.get("vertext", ""),
+            "reg": str(v.get("regdatum", "")),
+            "rader": str(len(v.get("rader", [])))
+        })
+    return Snabbvyresultat(
+        rubrik="Verifikationer (alla år)",
+        harkomst=HARKOMST_KALLA,
+        sektioner=[Sektion(
+            rubrik="Verifikationer",
+            tabell=TabellBlock(
+                kolumner=[KolumnDef(nyckel="serie", rubrik="Serie", typ="text"), KolumnDef(nyckel="nr", rubrik="Nr", typ="text"), KolumnDef(nyckel="datum", rubrik="Datum", typ="text"), KolumnDef(nyckel="text", rubrik="Text", typ="text"), KolumnDef(nyckel="reg", rubrik="Reg.datum", typ="text"), KolumnDef(nyckel="rader", rubrik="Rader", typ="text")],
+                rader=rader
+            ) if rader else None,
+            tomtext="Inga verifikationer hittades."
+        )]
+    )
+
+def bygg_enskilt_verifikat(data: Vydata) -> Snabbvyresultat:
+    if data.enskilt_verifikat is None:
+        return _saknas("Enskilt verifikat", "Sök eller välj ett verifikat för att visa detaljer.")
+    v = data.enskilt_verifikat
+    rader = []
+    for t in v.get("rader", []):
+        rader.append({
+            "konto": t.get("kontonr", ""),
+            "text": t.get("transtext", ""),
+            "belopp": _kr(t.get("belopp", Decimal("0")), data.formateringsval)
+        })
+    return Snabbvyresultat(
+        rubrik=f"Verifikat {v.get('serie')} {v.get('vernr')}",
+        harkomst=HARKOMST_KALLA,
+        sektioner=[Sektion(
+            rubrik=f"{v.get('verdatum')} - {v.get('vertext')}",
+            tabell=TabellBlock(
+                kolumner=[KolumnDef(nyckel="konto", rubrik="Konto", typ="text"), KolumnDef(nyckel="text", rubrik="Text", typ="text"), KolumnDef(nyckel="belopp", rubrik="Belopp", typ="text")],
+                rader=rader
+            ) if rader else None
+        )]
+    )
+
+def bygg_periodiseringar(data: Vydata) -> Snabbvyresultat:
+    if data.periodiseringar is None:
+        return _saknas("Periodiseringar", "Data")
+    rader = []
+    for p in data.periodiseringar:
+        rader.append({
+            "konto": p.get("kontonr", ""),
+            "start": p.get("startdatum", ""),
+            "perioder": str(p.get("antal_perioder", 0)),
+            "belopp": _kr(p.get("belopp", Decimal("0")), data.formateringsval),
+            "kalla": p.get("kall_id", "")
+        })
+    return Snabbvyresultat(
+        rubrik="Periodiseringar",
+        harkomst=HARKOMST_KALLA,
+        sektioner=[Sektion(
+            rubrik="Upplagda periodiseringar",
+            tabell=TabellBlock(
+                kolumner=[KolumnDef(nyckel="konto", rubrik="Konto", typ="text"), KolumnDef(nyckel="start", rubrik="Start", typ="text"), KolumnDef(nyckel="perioder", rubrik="Månader", typ="text"), KolumnDef(nyckel="belopp", rubrik="Månadsbelopp", typ="text"), KolumnDef(nyckel="kalla", rubrik="Källa", typ="text")],
+                rader=rader
+            ) if rader else None,
+            tomtext="Inga periodiseringar hittades."
+        )]
+    )
+
+def bygg_kontoplan_alla(data: Vydata) -> Snabbvyresultat:
+    if data.kontoplan_alla is None:
+        return _saknas("Kontoplan (alla år)", "Data")
+    rader = []
+    for k in data.kontoplan_alla:
+        rader.append({
+            "ar": k.get("rakenskapsar_id", ""),
+            "konto": k.get("kontonr", ""),
+            "namn": k.get("kontonamn", ""),
+            "typ": k.get("kontotypstext", ""),
+            "moms": k.get("momskod_id", "")
+        })
+    return Snabbvyresultat(
+        rubrik="Kontoplan (alla år)",
+        harkomst=HARKOMST_KALLA,
+        sektioner=[Sektion(
+            rubrik="Konton",
+            tabell=TabellBlock(
+                kolumner=[KolumnDef(nyckel="ar", rubrik="År ID", typ="text"), KolumnDef(nyckel="konto", rubrik="Konto", typ="text"), KolumnDef(nyckel="namn", rubrik="Namn", typ="text"), KolumnDef(nyckel="typ", rubrik="Typ", typ="text"), KolumnDef(nyckel="moms", rubrik="Moms", typ="text")],
+                rader=rader
+            ) if rader else None,
+            tomtext="Kontoplanen var tom."
+        )]
+    )
+
+def bygg_momsrapporter(data: Vydata) -> Snabbvyresultat:
+    if data.momsrapporter is None:
+        return _saknas("Momsrapporter", "Data")
+    rader = []
+    for r in data.momsrapporter:
+        rader.append({
+            "id": str(r.get("id", "")),
+            "period": f"{r.get('from_datum')} - {r.get('tom_datum')}",
+            "status": r.get("status", "")
+        })
+    return Snabbvyresultat(
+        rubrik="Momsrapporter",
+        harkomst=HARKOMST_KALLA,
+        sektioner=[Sektion(
+            rubrik="Rapporter i Spiris",
+            tabell=TabellBlock(
+                kolumner=[KolumnDef(nyckel="id", rubrik="ID", typ="text"), KolumnDef(nyckel="period", rubrik="Period", typ="text"), KolumnDef(nyckel="status", rubrik="Status", typ="text")],
+                rader=rader
+            ) if rader else None,
+            tomtext="Inga momsrapporter hittades."
+        )]
+    )
+
+def bygg_momskoder(data: Vydata) -> Snabbvyresultat:
+    if data.momskoder is None:
+        return _saknas("Momskoder", "Data")
+    rader = []
+    for m in data.momskoder:
+        rader.append({
+            "kod": m.get("kod", ""),
+            "namn": m.get("namn", ""),
+            "procent": str(m.get("momssats_procent", 0))
+        })
+    return Snabbvyresultat(
+        rubrik="Momskoder",
+        harkomst=HARKOMST_KALLA,
+        sektioner=[Sektion(
+            rubrik="Tillgängliga koder",
+            tabell=TabellBlock(
+                kolumner=[KolumnDef(nyckel="kod", rubrik="Kod", typ="text"), KolumnDef(nyckel="namn", rubrik="Namn", typ="text"), KolumnDef(nyckel="procent", rubrik="Sats %", typ="text")],
+                rader=rader
+            ) if rader else None,
+            tomtext="Inga momskoder hittades."
+        )]
+    )
+
+def bygg_underlag(data: Vydata) -> Snabbvyresultat:
+    if data.underlag is None:
+        return _saknas("Underlag", "Underlag")
+    rader = []
+    for u in data.underlag:
+        rader.append({
+            "id": str(u.get("id", "")),
+            "beskrivning": str(u.get("beskrivning", "")),
+            "status": str(u.get("status", "")),
+        })
+    return Snabbvyresultat(
+        rubrik="Underlag",
+        harkomst=HARKOMST_KALLA,
+        sektioner=[Sektion(
+            rubrik="Alla underlag",
+            tabell=TabellBlock(
+                kolumner=[
+                    KolumnDef(nyckel="id", rubrik="ID", typ="text"),
+                    KolumnDef(nyckel="beskrivning", rubrik="Beskrivning", typ="text"),
+                    KolumnDef(nyckel="status", rubrik="Status", typ="text")
+                ],
+                rader=rader
+            ) if rader else None,
+            tomtext="Inga underlag hittades."
+        )]
     )
 
 SNABBVYER_BOCKERNA = [
@@ -453,6 +699,108 @@ SNABBVYER_BOCKERNA = [
     Snabbvy("verifikatsokning", "Verifikatsökning", "🔍", bygg_verifikatsokning),
     Snabbvy("momsoversikt", "Momsöversikt", "💰", bygg_momsoversikt_vy),
     Snabbvy("verifikatutkast", "Verifikatutkast i Spiris", "📝", bygg_verifikatutkast),
+    Snabbvy("ingaende_balanser", "Ingående balanser", "🧾", bygg_ingaende_balanser),
+    Snabbvy("kontotransaktioner", "Kontotransaktioner", "📝", bygg_kontotransaktioner),
+    Snabbvy("verifikationer_alla", "Verifikationer (alla år)", "📚", bygg_verifikationer_alla),
+    Snabbvy("enskilt_verifikat", "Enskilt verifikat", "🔍", bygg_enskilt_verifikat),
+    Snabbvy("periodiseringar", "Periodiseringar", "📅", bygg_periodiseringar),
+    Snabbvy("kontoplan_alla", "Kontoplan (alla år)", "📑", bygg_kontoplan_alla),
+    Snabbvy("momsrapporter", "Momsrapporter", "📈", bygg_momsrapporter),
+    Snabbvy("momskoder", "Momskoder", "⚙️", bygg_momskoder),
+    Snabbvy("underlag", "Underlag", "📎", bygg_underlag),
+]
+
+
+
+def bygg_order(data: Vydata) -> Snabbvyresultat:
+    if data.ordrar is None:
+        return _saknas("Ordrar", "Ordrar")
+    rader = []
+    for o in data.ordrar:
+        rader.append({
+            "id": str(o.get("id", o.get("Id", ""))),
+            "kund": str(o.get("kundnamn", o.get("CustomerName", ""))),
+            "status": str(o.get("status", "")),
+            "belopp": _kr(Decimal(str(o.get("totalbelopp", o.get("Total", 0)))), data.formateringsval)
+        })
+    return Snabbvyresultat(
+        rubrik="Ordrar",
+        harkomst=HARKOMST_KALLA,
+        sektioner=[Sektion(
+            rubrik="Ordrar i Spiris",
+            tabell=TabellBlock(
+                kolumner=[
+                    KolumnDef(nyckel="id", rubrik="ID", typ="text"),
+                    KolumnDef(nyckel="kund", rubrik="Kund", typ="text"),
+                    KolumnDef(nyckel="status", rubrik="Status", typ="text"),
+                    KolumnDef(nyckel="belopp", rubrik="Belopp", typ="text")
+                ],
+                rader=rader
+            ) if rader else None,
+            tomtext="Inga ordrar hittades."
+        )]
+    )
+
+def bygg_offerter(data: Vydata) -> Snabbvyresultat:
+    if data.offerter is None:
+        return _saknas("Offerter", "Offerter")
+    rader = []
+    for o in data.offerter:
+        rader.append({
+            "id": str(o.get("id", o.get("Id", ""))),
+            "kund": str(o.get("kundnamn", o.get("CustomerName", ""))),
+            "status": str(o.get("status", "")),
+            "belopp": _kr(Decimal(str(o.get("totalbelopp", o.get("Total", 0)))), data.formateringsval)
+        })
+    return Snabbvyresultat(
+        rubrik="Offerter",
+        harkomst=HARKOMST_KALLA,
+        sektioner=[Sektion(
+            rubrik="Offerter i Spiris",
+            tabell=TabellBlock(
+                kolumner=[
+                    KolumnDef(nyckel="id", rubrik="ID", typ="text"),
+                    KolumnDef(nyckel="kund", rubrik="Kund", typ="text"),
+                    KolumnDef(nyckel="status", rubrik="Status", typ="text"),
+                    KolumnDef(nyckel="belopp", rubrik="Belopp", typ="text")
+                ],
+                rader=rader
+            ) if rader else None,
+            tomtext="Inga offerter hittades."
+        )]
+    )
+
+def bygg_offertutkast(data: Vydata) -> Snabbvyresultat:
+    if data.offertutkast is None:
+        return _saknas("Offertutkast", "Offertutkast")
+    rader = []
+    for o in data.offertutkast:
+        rader.append({
+            "id": str(o.get("id", o.get("Id", ""))),
+            "kund": str(o.get("kundnamn", o.get("CustomerName", ""))),
+            "belopp": _kr(Decimal(str(o.get("totalbelopp", o.get("Total", 0)))), data.formateringsval)
+        })
+    return Snabbvyresultat(
+        rubrik="Offertutkast",
+        harkomst=HARKOMST_KALLA,
+        sektioner=[Sektion(
+            rubrik="Offertutkast i Spiris",
+            tabell=TabellBlock(
+                kolumner=[
+                    KolumnDef(nyckel="id", rubrik="ID", typ="text"),
+                    KolumnDef(nyckel="kund", rubrik="Kund", typ="text"),
+                    KolumnDef(nyckel="belopp", rubrik="Belopp", typ="text")
+                ],
+                rader=rader
+            ) if rader else None,
+            tomtext="Inga offertutkast hittades."
+        )]
+    )
+
+SNABBVYER_SALJDOKUMENT = [
+    Snabbvy("order", "Ordrar", "📦", bygg_order),
+    Snabbvy("offerter", "Offerter", "📄", bygg_offerter),
+    Snabbvy("offertutkast", "Offertutkast", "📝", bygg_offertutkast),
 ]
 
 
@@ -1229,6 +1577,239 @@ def bygg_kostnadsstallen(data: Vydata) -> Snabbvyresultat:
         sektioner=[Sektion(rubrik="Kostnadsställen", tabell=tabell)],
     )
 
+def bygg_prislistor(data: Vydata) -> Snabbvyresultat:
+    if data.prislistor is None:
+        return _saknas("Prislistor", "Prislistor")
+    
+    rader = []
+    for p in data.prislistor:
+        rader.append({
+            "id": str(p.get("Id", "")),
+            "namn": str(p.get("Name", "")),
+            "nummer": str(p.get("Number", "")),
+            "aktiv": "Ja" if p.get("IsActive") else "Nej"
+        })
+        
+    tabell = TabellBlock(
+        kolumner=[
+            KolumnDef(nyckel="id", rubrik="ID", typ="text"),
+            KolumnDef(nyckel="nummer", rubrik="Nummer", typ="text"),
+            KolumnDef(nyckel="namn", rubrik="Namn", typ="text"),
+            KolumnDef(nyckel="aktiv", rubrik="Aktiv", typ="text"),
+        ],
+        rader=rader
+    )
+    
+    return Snabbvyresultat(
+        rubrik="Prislistor",
+        harkomst=HARKOMST_KALLA,
+        nyckeltal=[Nyckeltal("Antal prislistor", str(len(data.prislistor)))],
+        sektioner=[Sektion(rubrik="Tillgängliga prislistor", tabell=tabell if rader else None, tomtext="Inga prislistor hittades.")]
+    )
+
+
+def bygg_rabattavtal(data: Vydata) -> Snabbvyresultat:
+    if data.rabattavtal is None:
+        return _saknas("Rabattavtal", "Rabattavtal")
+        
+    rader = []
+    for r in data.rabattavtal:
+        rader.append({
+            "id": str(r.get("Id", "")),
+            "beskrivning": str(r.get("Description", "")),
+            "rabatt": f"{r.get('DiscountPercent', 0)} %",
+            "aktiv": "Ja" if r.get("IsActive") else "Nej"
+        })
+        
+    tabell = TabellBlock(
+        kolumner=[
+            KolumnDef(nyckel="id", rubrik="ID", typ="text"),
+            KolumnDef(nyckel="beskrivning", rubrik="Beskrivning", typ="text"),
+            KolumnDef(nyckel="rabatt", rubrik="Rabatt %", typ="text"),
+            KolumnDef(nyckel="aktiv", rubrik="Aktiv", typ="text"),
+        ],
+        rader=rader
+    )
+    
+    return Snabbvyresultat(
+        rubrik="Rabattavtal",
+        harkomst=HARKOMST_KALLA,
+        nyckeltal=[Nyckeltal("Antal avtal", str(len(data.rabattavtal)))],
+        sektioner=[Sektion(rubrik="Avtal", tabell=tabell if rader else None, tomtext="Inga rabattavtal hittades.")]
+    )
+
+
+def bygg_etiketter(data: Vydata) -> Snabbvyresultat:
+    if data.etiketter is None:
+        return _saknas("Etiketter", "Etiketter")
+        
+    rader = []
+    for e in data.etiketter:
+        rader.append({
+            "typ": str(e.get("Typ", "")),
+            "id": str(e.get("Id", "")),
+            "namn": str(e.get("Name", "")),
+            "beskrivning": str(e.get("Description", ""))
+        })
+        
+    tabell = TabellBlock(
+        kolumner=[
+            KolumnDef(nyckel="typ", rubrik="Typ", typ="text"),
+            KolumnDef(nyckel="namn", rubrik="Namn", typ="text"),
+            KolumnDef(nyckel="beskrivning", rubrik="Beskrivning", typ="text"),
+        ],
+        rader=rader
+    )
+    
+    return Snabbvyresultat(
+        rubrik="Etiketter",
+        harkomst=HARKOMST_KALLA,
+        nyckeltal=[Nyckeltal("Antal etiketter", str(len(data.etiketter)))],
+        sektioner=[Sektion(rubrik="Etiketter", tabell=tabell if rader else None, tomtext="Inga etiketter hittades.")]
+    )
+
+
+def bygg_anlaggningstillgangar(data: Vydata) -> Snabbvyresultat:
+    if data.anlaggningstillgangar is None:
+        return _saknas("Anläggningstillgångar", "Anläggningstillgångar")
+        
+    rader = []
+    for a in data.anlaggningstillgangar:
+        rader.append({
+            "id": str(a.get("Id", "")),
+            "namn": str(a.get("Description", "")),
+            "nummer": str(a.get("Number", "")),
+            "konto": str(a.get("AssetAccountId", ""))
+        })
+        
+    tabell = TabellBlock(
+        kolumner=[
+            KolumnDef(nyckel="nummer", rubrik="Nummer", typ="text"),
+            KolumnDef(nyckel="namn", rubrik="Beskrivning", typ="text"),
+            KolumnDef(nyckel="konto", rubrik="Konto ID", typ="text"),
+        ],
+        rader=rader
+    )
+    
+    return Snabbvyresultat(
+        rubrik="Anläggningstillgångar",
+        harkomst=HARKOMST_KALLA,
+        nyckeltal=[Nyckeltal("Antal tillgångar", str(len(data.anlaggningstillgangar)))],
+        sektioner=[Sektion(rubrik="Anläggningstillgångar", tabell=tabell if rader else None, tomtext="Inga tillgångar hittades.")]
+    )
+
+
+def bygg_foretagsinfo(data: Vydata) -> Snabbvyresultat:
+    if data.foretagsinfo is None:
+        return _saknas("Företagsinformation", "Företagsinformation")
+        
+    f = data.foretagsinfo
+    rader = [
+        {"egenskap": "Namn", "varde": str(f.get("Name", ""))},
+        {"egenskap": "Org.nummer", "varde": str(f.get("OrganizationNumber", ""))},
+        {"egenskap": "Adress", "varde": str(f.get("Address1", ""))},
+        {"egenskap": "Postnummer", "varde": str(f.get("ZipCode", ""))},
+        {"egenskap": "Ort", "varde": str(f.get("City", ""))},
+        {"egenskap": "E-post", "varde": str(f.get("Email", ""))},
+        {"egenskap": "Telefon", "varde": str(f.get("Phone", ""))},
+    ]
+    
+    tabell = TabellBlock(
+        kolumner=[
+            KolumnDef(nyckel="egenskap", rubrik="Egenskap", typ="text"),
+            KolumnDef(nyckel="varde", rubrik="Värde", typ="text"),
+        ],
+        rader=rader
+    )
+    
+    return Snabbvyresultat(
+        rubrik="Företagsinformation",
+        harkomst=HARKOMST_KALLA,
+        sektioner=[Sektion(rubrik="Detaljer", tabell=tabell)]
+    )
+
+
+def bygg_anvandare(data: Vydata) -> Snabbvyresultat:
+    if data.anvandare is None:
+        return _saknas("Användare", "Användare")
+        
+    rader = []
+    for a in data.anvandare:
+        rader.append({
+            "namn": str(a.get("Name", "")),
+            "epost": str(a.get("Email", "")),
+        })
+        
+    tabell = TabellBlock(
+        kolumner=[
+            KolumnDef(nyckel="namn", rubrik="Namn", typ="text"),
+            KolumnDef(nyckel="epost", rubrik="E-post", typ="text"),
+        ],
+        rader=rader
+    )
+    
+    return Snabbvyresultat(
+        rubrik="Användare",
+        harkomst=HARKOMST_KALLA,
+        nyckeltal=[Nyckeltal("Antal användare", str(len(data.anvandare)))],
+        sektioner=[Sektion(rubrik="Användarlista", tabell=tabell if rader else None, tomtext="Inga användare hittades.", dold_detalj=True)]
+    )
+
+
+def bygg_valutakurs(data: Vydata) -> Snabbvyresultat:
+    if data.valutakurs is None:
+        return Snabbvyresultat(
+            rubrik="Valutakurs",
+            sektioner=[Sektion(rubrik="Välj valuta", beskrivning="Välj valutapar och datum ovan för att hämta kurs.")]
+        )
+        
+    v = data.valutakurs
+    return Snabbvyresultat(
+        rubrik="Valutakurs",
+        harkomst=HARKOMST_KALLA,
+        nyckeltal=[
+            Nyckeltal("Kurs", str(v.get("Rate", ""))),
+            Nyckeltal("Från", str(v.get("Code", ""))),
+            Nyckeltal("Datum", str(v.get("Date", ""))),
+        ],
+        sektioner=[]
+    )
+
+
+def bygg_kundreskontraposter(data: Vydata) -> Snabbvyresultat:
+    if data.kundreskontraposter is None:
+        return _saknas("Kundreskontraposter", "Kundreskontraposter")
+        
+    rader = []
+    for p in data.kundreskontraposter:
+        rader.append({
+            "faktura": str(p.get("InvoiceNumber", "")),
+            "kund": str(p.get("CustomerName", "")),
+            "datum": str(p.get("InvoiceDate", "")),
+            "forfaller": str(p.get("DueDate", "")),
+            "total": _kr(Decimal(str(p.get("Total") or "0")), data.formateringsval),
+            "saldo": _kr(Decimal(str(p.get("Balance") or "0")), data.formateringsval)
+        })
+        
+    tabell = TabellBlock(
+        kolumner=[
+            KolumnDef(nyckel="faktura", rubrik="Fakturanr", typ="text"),
+            KolumnDef(nyckel="kund", rubrik="Kund", typ="text"),
+            KolumnDef(nyckel="datum", rubrik="Datum", typ="datum"),
+            KolumnDef(nyckel="forfaller", rubrik="Förfaller", typ="datum"),
+            KolumnDef(nyckel="total", rubrik="Total", typ="text"),
+            KolumnDef(nyckel="saldo", rubrik="Saldo", typ="text"),
+        ],
+        rader=rader
+    )
+    
+    return Snabbvyresultat(
+        rubrik="Kundreskontraposter",
+        harkomst=HARKOMST_KALLA,
+        nyckeltal=[Nyckeltal("Antal poster", str(len(data.kundreskontraposter)))],
+        sektioner=[Sektion(rubrik="Poster", tabell=tabell if rader else None, tomtext="Inga poster hittades.")]
+    )
+
 def bygg_referensdata(data: Vydata) -> Snabbvyresultat:
     if not data.vald_referenstyp:
         return Snabbvyresultat(
@@ -1282,5 +1863,14 @@ SNABBVYER_REGISTER: tuple[Snabbvy, ...] = (
     Snabbvy("projekt", "Projekt", "🏗️", bygg_projekt, "Aktiva och avslutade projekt"),
     Snabbvy("kostnadsstallen", "Kostnadsställen", "🏷️", bygg_kostnadsstallen, "Bokföringens resultatenheter"),
     Snabbvy("referensdata", "Referensdata", "📚", bygg_referensdata, "Systemets gemensamma referenslistor"),
+    Snabbvy("prislistor", "Prislistor", "🏷", bygg_prislistor),
+    Snabbvy("rabattavtal", "Rabattavtal", "🤝", bygg_rabattavtal),
+    Snabbvy("etiketter", "Etiketter", "🔖", bygg_etiketter),
+    Snabbvy("anlaggningstillgangar", "Anläggningstillgångar", "🏗️", bygg_anlaggningstillgangar),
+    Snabbvy("foretagsinfo", "Företagsinformation", "🏢", bygg_foretagsinfo),
+    Snabbvy("anvandare", "Användare", "👤", bygg_anvandare),
+    Snabbvy("valutakurs", "Valutakurs", "💱", bygg_valutakurs),
+    Snabbvy("kundreskontraposter", "Kundreskontraposter", "🧾", bygg_kundreskontraposter),
 )
+
 

@@ -20,7 +20,8 @@ from rum import (
     RUM_PENGAR_UT,
     RUM_BOCKERNA,
     RUM_RAPPORTER,
-    RUM_INVESTERINGSKALKYL
+    RUM_INVESTERINGSKALKYL,
+    RUM_SALJDOKUMENT
 )
 import rum_render
 import utkast
@@ -217,7 +218,8 @@ sidor = {
         st.Page(_rendera_beslut_wrapper,                title=atgardsstatus.etikett, icon="⚖️", url_path="beslut"),
     ],
     "Pengar": [
-        st.Page(rum_render.rendera_pengar_in,           title="Pengar in",          icon="💵", url_path="pengar-in"),
+        st.Page(rum_render.rendera_pengar_in,           title="Pengar in",          icon="📥", url_path="pengar-in"),
+        st.Page(rum_render.rendera_saljdokument,        title="Säljdokument",       icon="🧾", url_path="saljdokument"),
         st.Page(rum_render.rendera_pengar_ut,           title="Pengar ut",          icon="💸", url_path="pengar-ut"),
         st.Page(rum_render.rendera_bank,                title="Bank",               icon="🏦", url_path="bank"),
     ],

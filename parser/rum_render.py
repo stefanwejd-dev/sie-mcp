@@ -853,6 +853,12 @@ def rendera_beslut(spiris_client_id: str, spiris_client_secret: str) -> None:
 
 
 def rendera_pengar_in() -> None:
+    if st.session_state.get("aktivt_fakturautkast"):
+        import app_config
+        cfg = app_config.las_config()
+        _rendera_fakturautkast(cfg.spiris_client_id, cfg.spiris_client_secret)
+        return
+
     st.header("📥 Pengar in")
     if not st.session_state.get("spiris_kundreskontra") and not st.session_state.get("sie"):
         tomt_lage(st, hamta("kundreskontra"), "Reskontra")
@@ -869,8 +875,50 @@ def rendera_pengar_in() -> None:
     snabbvy_render.rendera_snabbvyfalt(st, snabbvyer.SNABBVYER_KUND, "snabbvy_pengar_in", vydata)
     
     with st.expander("➕ Ny åtgärd"):
-        from atgardsformular import FAKTURAUTSKICK, BETALNINGSPAMINNELSE, BETALNINGSREGISTRERING, MAKULERING, EFAKTURAUTSKICK, SALJDOKUMENTUTSKICK, SALJDOKUMENTATGARD
-        for f in [FAKTURAUTSKICK, BETALNINGSPAMINNELSE, BETALNINGSREGISTRERING, MAKULERING, EFAKTURAUTSKICK, SALJDOKUMENTUTSKICK, SALJDOKUMENTATGARD]:
+        from atgardsformular import FAKTURAUTSKICK, BETALNINGSPAMINNELSE, BETALNINGSREGISTRERING, MAKULERING, EFAKTURAUTSKICK
+        for f in [FAKTURAUTSKICK, BETALNINGSPAMINNELSE, BETALNINGSREGISTRERING, MAKULERING, EFAKTURAUTSKICK]:
+            rendera_atgardsformular(st, f)
+
+def rendera_saljdokument() -> None:
+    st.header("🧾 Säljdokument")
+    import app_config
+    cfg = app_config.las_config()
+    klient = None
+    if st.session_state.get("spiris_tokens"):
+        try:
+            klient = _bygg_spiris_klient_fran_session(cfg.spiris_client_id, cfg.spiris_client_secret)
+        except Exception:
+            pass
+
+    if "saljdokument_ordrar" not in st.session_state and klient:
+        try:
+            st.session_state.saljdokument_ordrar = spiris_adapter.hamta_order(klient)
+        except Exception:
+            pass
+    if "saljdokument_offerter" not in st.session_state and klient:
+        try:
+            st.session_state.saljdokument_offerter = spiris_adapter.hamta_offerter(klient)
+        except Exception:
+            pass
+    if "saljdokument_offertutkast" not in st.session_state and klient:
+        try:
+            st.session_state.saljdokument_offertutkast = spiris_adapter.hamta_offertutkast(klient)
+        except Exception:
+            pass
+
+    snabbvy_render.injicera_snabbvy_css(st)
+    vydata = snabbvyer.Vydata(
+        idag=datetime.date.today(),
+        formateringsval=hamta_val(),
+        ordrar=st.session_state.get("saljdokument_ordrar"),
+        offerter=st.session_state.get("saljdokument_offerter"),
+        offertutkast=st.session_state.get("saljdokument_offertutkast"),
+    )
+    snabbvy_render.rendera_snabbvyfalt(st, snabbvyer.SNABBVYER_SALJDOKUMENT, "snabbvy_saljdokument", vydata)
+    
+    with st.expander("➕ Ny åtgärd"):
+        from atgardsformular import SALJDOKUMENTUTSKICK, SALJDOKUMENTATGARD, OFFERTUTKAST_FORMULAR
+        for f in [SALJDOKUMENTUTSKICK, SALJDOKUMENTATGARD, OFFERTUTKAST_FORMULAR]:
             rendera_atgardsformular(st, f)
 
 def rendera_pengar_ut() -> None:
@@ -890,8 +938,8 @@ def rendera_pengar_ut() -> None:
     snabbvy_render.rendera_snabbvyfalt(st, snabbvyer.SNABBVYER_LEVERANTOR, "snabbvy_pengar_ut", vydata)
     
     with st.expander("➕ Ny åtgärd"):
-        from atgardsformular import LEVERANTORSFAKTURAUTKAST, LEVERANTORSBETALNING, ATTEST
-        for f in [LEVERANTORSFAKTURAUTKAST, LEVERANTORSBETALNING, ATTEST]:
+        from atgardsformular import LEVERANTORSFAKTURAUTKAST, LEVERANTORSBETALNING, ATTEST, KVITTNING
+        for f in [LEVERANTORSFAKTURAUTKAST, LEVERANTORSBETALNING, ATTEST, KVITTNING]:
             rendera_atgardsformular(st, f)
 
 def rendera_bockerna() -> None:
@@ -914,7 +962,31 @@ def rendera_bockerna() -> None:
         import app_tillstand
         app_tillstand.ladda_bockerna_data(st, klient)
 
+    if "bockerna_underlag" not in st.session_state and klient:
+        try:
+            st.session_state.bockerna_underlag = spiris_adapter.hamta_underlag(klient)
+        except Exception:
+            pass
+
     soktext = st.text_input("Sök i verifikationer", value="", placeholder="Sök på verifikattext eller transaktionstext...")
+    col1, col2 = st.columns(2)
+    kontonr_sok = col1.text_input("Kontonummer (för transaktionsvy)", value="", placeholder="T.ex. 1930")
+    vernr_sok = col2.text_input("Verifikat-ID (för detaljvy)", value="", placeholder="T.ex. A 1")
+    
+    kontotransaktioner = None
+    enskilt_verifikat = None
+    if klient and st.session_state.get("spiris_hamtat_ar"):
+        ar_id = st.session_state.get("spiris_hamtat_ar")
+        if kontonr_sok:
+            try:
+                kontotransaktioner = spiris_adapter.hamta_kontotransaktioner(klient, ar_id, kontonr_sok)
+            except Exception:
+                pass
+        if vernr_sok:
+            try:
+                enskilt_verifikat = spiris_adapter.hamta_en_verifikation(klient, ar_id, vernr_sok)
+            except Exception:
+                pass
     
     snabbvy_render.injicera_snabbvy_css(st)
 
@@ -942,16 +1014,38 @@ def rendera_bockerna() -> None:
         verifikationer=st.session_state.get("bockerna_verifikationer"),
         verifikatutkast=st.session_state.get("bockerna_verifikatutkast"),
         momsoversikt=st.session_state.get("bockerna_momsoversikt"),
+        ingaende_balanser=st.session_state.get("bockerna_ingaende_balanser"),
+        kontotransaktioner=kontotransaktioner,
+        verifikationer_alla=st.session_state.get("bockerna_verifikationer_alla"),
+        enskilt_verifikat=enskilt_verifikat,
+        periodiseringar=st.session_state.get("bockerna_periodiseringar"),
+        kontoplan_alla=st.session_state.get("bockerna_kontoplan_alla"),
+        momsrapporter=st.session_state.get("bockerna_momsrapporter"),
+        momskoder=st.session_state.get("bockerna_momskoder"),
         soktext=soktext,
+        underlag=st.session_state.get("bockerna_underlag"),
     )
     
     snabbvy_render.rendera_snabbvyfalt(
         st, snabbvyer.SNABBVYER_BOCKERNA, "snabbvy_bockerna", vydata
     )
+
+    if st.session_state.get("snabbvy_bockerna") == "underlag":
+        underlag_lista = st.session_state.get("bockerna_underlag") or []
+        if underlag_lista:
+            st.subheader("Ladda ner bilaga")
+            valt_id = st.selectbox("Välj underlag", [u.get("id") for u in underlag_lista], format_func=lambda i: next((u.get("beskrivning") or u.get("id") for u in underlag_lista if u.get("id") == i), i))
+            if valt_id and klient:
+                if st.button("Hämta fil"):
+                    try:
+                        meta, fbytes = spiris_adapter.hamta_underlag_fil(klient, valt_id)
+                        st.download_button("Ladda ner " + meta.get("filnamn", "bilaga"), data=fbytes, file_name=meta.get("filnamn", "bilaga.pdf"), mime=meta.get("mime", "application/pdf"))
+                    except Exception as e:
+                        st.error(f"Kunde inte ladda ner filen: {e}")
     
     with st.expander("➕ Ny åtgärd"):
-        from atgardsformular import VERIFIKAT, SIE4IMPORT
-        for f in [VERIFIKAT, SIE4IMPORT]:
+        from atgardsformular import VERIFIKAT, SIE4IMPORT, PERIODISERING, UTKASTANDRING, UTKASTBORTTAGNING, UTKASTBOKFORING, UNDERLAGSKOPPLING, PERIODISERINGSANDRING, PERIODISERINGSBORTTAGNING
+        for f in [VERIFIKAT, SIE4IMPORT, PERIODISERING, UTKASTANDRING, UTKASTBORTTAGNING, UTKASTBOKFORING, UNDERLAGSKOPPLING, PERIODISERINGSANDRING, PERIODISERINGSBORTTAGNING]:
             rendera_atgardsformular(st, f)
 
 def rendera_rapporter() -> None:
@@ -1034,6 +1128,8 @@ def rendera_juridik() -> None:
 
 def rendera_foretags_chatt() -> None:
     st.header("💬 Företagsdata")
+    if st.session_state.get("aktivt_fakturautkast"):
+        st.info("Ett fakturautkast väntar i **Pengar in**.")
     st.markdown("Här pratar du med en pedagogisk assistent som analyserar din uppladdade data. Du kan ändra svarsstil ovanför.")
     
     sie = st.session_state.get("sie")
@@ -1122,6 +1218,11 @@ def rendera_bank() -> None:
     snabbvy_render.rendera_snabbvyfalt(
         st, snabbvyer.SNABBVYER_BANK, "snabbvy_bank", vydata
     )
+
+    with st.expander("➕ Ny åtgärd"):
+        from atgardsformular import BETALNINGSVERIFIKAT
+        for f in [BETALNINGSVERIFIKAT]:
+            rendera_atgardsformular(st, f)
 
 
 def rendera_register() -> None:
@@ -1214,6 +1315,73 @@ def rendera_register() -> None:
         except Exception:
             pass
 
+    vald_vy = st.session_state.get("snabbvy_register")
+    
+    if vald_vy in ("prislistor", "rabattavtal", "etiketter", "anlaggningstillgangar", "foretagsinfo", "anvandare", "kundreskontraposter") and har_spiris:
+        klient_od = None
+        try:
+            cfg = app_config.las_config()
+            klient_od = _bygg_spiris_klient_fran_session(cfg.spiris_client_id, cfg.spiris_client_secret)
+        except Exception:
+            pass
+            
+        if klient_od:
+            if vald_vy == "prislistor" and "prislistor" not in st.session_state:
+                from spiris_adapter import hamta_prislistor
+                try: st.session_state.prislistor = hamta_prislistor(klient_od)
+                except Exception: st.session_state.prislistor = None
+                
+            elif vald_vy == "rabattavtal" and "rabattavtal" not in st.session_state:
+                from spiris_adapter import hamta_rabattavtal
+                try: st.session_state.rabattavtal = hamta_rabattavtal(klient_od)
+                except Exception: st.session_state.rabattavtal = None
+                
+            elif vald_vy == "etiketter" and "etiketter" not in st.session_state:
+                from spiris_adapter import hamta_etiketter
+                try: 
+                    e1 = hamta_etiketter(klient_od, "kund")
+                    for e in e1: e["Typ"] = "kund"
+                    e2 = hamta_etiketter(klient_od, "artikel")
+                    for e in e2: e["Typ"] = "artikel"
+                    st.session_state.etiketter = e1 + e2
+                except Exception: st.session_state.etiketter = None
+                
+            elif vald_vy == "anlaggningstillgangar" and "anlaggningstillgangar" not in st.session_state:
+                from spiris_adapter import hamta_anlaggningstillgangar
+                try: st.session_state.anlaggningstillgangar = hamta_anlaggningstillgangar(klient_od)
+                except Exception: st.session_state.anlaggningstillgangar = None
+                
+            elif vald_vy == "foretagsinfo" and "foretagsinfo" not in st.session_state:
+                from spiris_adapter import hamta_foretagsinfo
+                try: st.session_state.foretagsinfo = hamta_foretagsinfo(klient_od)
+                except Exception: st.session_state.foretagsinfo = None
+                
+            elif vald_vy == "anvandare" and "anvandare" not in st.session_state:
+                from spiris_adapter import hamta_anvandare
+                try: st.session_state.anvandare = hamta_anvandare(klient_od)
+                except Exception: st.session_state.anvandare = None
+                
+            elif vald_vy == "kundreskontraposter" and "kundreskontraposter" not in st.session_state:
+                from spiris_adapter import hamta_kundreskontraposter
+                try: st.session_state.kundreskontraposter = hamta_kundreskontraposter(klient_od)
+                except Exception: st.session_state.kundreskontraposter = None
+
+    valutakurs = None
+    if vald_vy == "valutakurs":
+        st.write("### Hämta valutakurs")
+        kol1, kol2, kol3 = st.columns(3)
+        fran = kol1.text_input("Från valuta", value="EUR")
+        till = kol2.text_input("Till valuta", value="SEK")
+        datum = kol3.date_input("Datum", value=date.today())
+        if st.button("Hämta kurs"):
+            try:
+                cfg = app_config.las_config()
+                klient_od = _bygg_spiris_klient_fran_session(cfg.spiris_client_id, cfg.spiris_client_secret)
+                from spiris_adapter import hamta_valutakurs
+                valutakurs = hamta_valutakurs(klient_od, str(datum), fran, till)
+            except Exception as e:
+                st.error(f"Kunde inte hämta valutakurs: {e}")
+
     vydata = snabbvyer.Vydata(
         vasentlighet=vasentlighet_data,
         kontotyp_avvikelser=kontotyp_avvikelser_data,
@@ -1228,6 +1396,14 @@ def rendera_register() -> None:
         vald_referenstyp=vald_typ,
         leverantorsfakturor=st.session_state.get("register_leverantorsfakturor"),
         kundfakturor=st.session_state.get("register_kundfakturor"),
+        prislistor=st.session_state.get("prislistor"),
+        rabattavtal=st.session_state.get("rabattavtal"),
+        etiketter=st.session_state.get("etiketter"),
+        anlaggningstillgangar=st.session_state.get("anlaggningstillgangar"),
+        foretagsinfo=st.session_state.get("foretagsinfo"),
+        anvandare=st.session_state.get("anvandare"),
+        valutakurs=valutakurs,
+        kundreskontraposter=st.session_state.get("kundreskontraposter"),
     )
     
     snabbvy_render.rendera_snabbvyfalt(
@@ -1235,11 +1411,317 @@ def rendera_register() -> None:
     )
     
     with st.expander("➕ Ny åtgärd"):
-        from atgardsformular import MASTERDATAANDRING, MASTERDATABORTTAGNING
-        for f in [MASTERDATAANDRING, MASTERDATABORTTAGNING]:
+        from atgardsformular import MASTERDATAANDRING, MASTERDATABORTTAGNING, KONTO, KONTOANDRING
+        for f in [MASTERDATAANDRING, MASTERDATABORTTAGNING, KONTO, KONTOANDRING]:
             rendera_atgardsformular(st, f)
 
+
+def _rendera_kvittning_formular(st: Any) -> None:
+    st.subheader("Kvittning")
+    faktura_id = st.text_input("Kreditfaktura (nummer eller id)", key="kvitto_kredit")
+    if not faktura_id:
+        st.info("Ange kreditfaktura för att hämta kvittningskandidater.")
+        return
+        
+    klient = _bygg_klient()
+    from spiris_adapter import hamta_kvittningskandidater
+    try:
+        kandidater = hamta_kvittningskandidater(klient, faktura_id)
+    except Exception as e:
+        st.error(f"Kunde inte hämta kvittningskandidater: {e}")
+        return
+        
+    if not kandidater:
+        st.warning("Inga kvittningskandidater hittades för denna kreditfaktura.")
+        return
+        
+    kand_id_str = {str(k.get("Id", "")): k for k in kandidater}
+    
+    with st.form("kvittning_form", clear_on_submit=True):
+        valda = st.multiselect("Debetfakturor", options=list(kand_id_str.keys()), format_func=lambda x: f"{kand_id_str[x].get('InvoiceNumber', '')} ({kand_id_str[x].get('Total', '')} kr)")
+        datum = st.text_input("Verifikatdatum (ÅÅÅÅ-MM-DD)")
+        
+        from atgardsformular import KVITTNING
+        if st.form_submit_button("Skapa utkast"):
+            if not valda or not datum:
+                st.error("Du måste välja minst en debetfaktura och ange ett datum.")
+            else:
+                try:
+                    payload = KVITTNING.bygg_nyttolast({
+                        "kreditfaktura_id": faktura_id,
+                        "debetfakturor": valda,
+                        "verifikatdatum": datum
+                    })
+                    import utkast
+                    utkast.skapa(KVITTNING.utkasttyp, payload)
+                    st.success(f"Utkast skapat: {KVITTNING.rubrik}")
+                except ValueError as e:
+                    st.error(str(e))
+
+def _rendera_underlagskoppling_formular(st: Any) -> None:
+    st.subheader("Koppla underlag")
+    
+    from spiris_adapter import hamta_underlag, UNDERLAG_DOKUMENTTYPER
+    klient = _bygg_klient()
+    try:
+        underlag = hamta_underlag(klient, include_matched=False)
+    except Exception as e:
+        st.error(f"Kunde inte hämta underlag: {e}")
+        return
+        
+    if not underlag:
+        st.info("Det finns inga okopplade underlag.")
+        return
+        
+    und_id_str = {str(u.get("Id", "")): u for u in underlag}
+    
+    with st.form("underlagskoppling_form", clear_on_submit=True):
+        valt_underlag = st.selectbox("Underlag", options=list(und_id_str.keys()), format_func=lambda x: f"{und_id_str[x].get('Name', x)}")
+        
+        # UNDERLAG_DOKUMENTTYPER keys as options, the Spiris values are at index 0 of the tuple
+        dok_typ_display = st.selectbox("Dokumenttyp", options=list(UNDERLAG_DOKUMENTTYPER.keys()))
+        dok_id = st.text_input("Dokument-ID")
+        
+        from atgardsformular import UNDERLAGSKOPPLING
+        if st.form_submit_button("Skapa utkast"):
+            if not valt_underlag or not dok_id or not dok_typ_display:
+                st.error("Fyll i alla obligatoriska fält.")
+            else:
+                try:
+                    payload = UNDERLAGSKOPPLING.bygg_nyttolast({
+                        "underlag_id": valt_underlag,
+                        "dokument_id": dok_id,
+                        "dokument_typ": UNDERLAG_DOKUMENTTYPER[dok_typ_display][0]
+                    })
+                    import utkast
+                    utkast.skapa(UNDERLAGSKOPPLING.utkasttyp, payload)
+                    st.success(f"Utkast skapat: {UNDERLAGSKOPPLING.rubrik}")
+                except ValueError as e:
+                    st.error(str(e))
+
+def _rendera_konto_formular(st: Any) -> None:
+    st.subheader("Nytt konto")
+    ar_id = st.session_state.get("spiris_hamtat_ar")
+    if not ar_id:
+        st.error("Inget räkenskapsår valt.")
+        return
+        
+    st.caption(f"Räkenskapsår ID: {ar_id}")
+    
+    klient = _bygg_klient()
+    from spiris_adapter import hamta_momskoder
+    try:
+        momskoder = hamta_momskoder(klient, per_datum=None) # Or use existing state
+    except Exception:
+        momskoder = []
+        
+    momskod_opts = {m.get("Id"): m for m in momskoder} if isinstance(momskoder, list) else {}
+        
+    with st.form("konto_form", clear_on_submit=True):
+        kontonr = st.text_input("Kontonummer *")
+        kontonamn = st.text_input("Kontonamn *")
+        aktiv = st.checkbox("Aktiv", value=True)
+        
+        kontotyp = st.selectbox("Kontotyp (valfri)", options=[""] + ["Asset", "Liability", "Equity", "Revenue", "Cost"])
+        momskod_id = st.selectbox("Momskod (valfri)", options=[""] + list(momskod_opts.keys()), format_func=lambda x: f"{x} - {momskod_opts[x].get('Description', '')}" if x else "")
+        projekt_tillatet = st.checkbox("Projekt tillåtet")
+        kostnadsstalle_tillatet = st.checkbox("Kostnadsställe tillåtet")
+        sparrat = st.checkbox("Spärrat för manuell bokning")
+        
+        from atgardsformular import KONTO
+        if st.form_submit_button("Skapa utkast"):
+            if not kontonr or not kontonamn:
+                st.error("Fyll i alla obligatoriska fält.")
+            else:
+                data = {
+                    "kontonr": kontonr,
+                    "kontonamn": kontonamn,
+                    "rakenskapsar_id": ar_id,
+                    "aktiv": aktiv,
+                    "projekt_tillatet": projekt_tillatet,
+                    "kostnadsstalle_tillatet": kostnadsstalle_tillatet,
+                    "sparrat_for_manuell_bokning": sparrat
+                }
+                if kontotyp: data["kontotyp"] = kontotyp
+                if momskod_id: data["momskod_id"] = momskod_id
+                
+                try:
+                    payload = KONTO.bygg_nyttolast(data)
+                    import utkast
+                    utkast.skapa(KONTO.utkasttyp, payload)
+                    st.success(f"Utkast skapat: {KONTO.rubrik}")
+                except ValueError as e:
+                    st.error(str(e))
+
+def _rendera_kontoandring_formular(st: Any) -> None:
+    st.subheader("Ändra konto")
+    ar_id = st.session_state.get("spiris_hamtat_ar")
+    if not ar_id:
+        st.error("Inget räkenskapsår valt.")
+        return
+        
+    kontonr = st.text_input("Kontonummer (nuvarande)")
+    if not kontonr:
+        st.info("Ange kontonummer att ändra.")
+        return
+        
+    klient = _bygg_klient()
+    from spiris_adapter import hamta_kontotransaktioner, _KONTO_ALLOWLIST
+    try:
+        # Actually Spiris API needs /accounts/{FinancialYear}/{Number}
+        # In adapters we have `hamta_kontosaldon` or `hamta_kontoplan_alla`. But `hamta_ett` isn't fully standardized.
+        # Let's use `hamta_kontoplan_alla` and filter.
+        from spiris_adapter import hamta_kontoplan_alla
+        plan = hamta_kontoplan_alla(klient)
+        # plan is list of dicts.
+        nuvarande = None
+        for k in plan:
+            if str(k.get("FinancialYear")) == str(ar_id) and str(k.get("Number")) == str(kontonr):
+                nuvarande = k
+                break
+    except Exception as e:
+        st.error(f"Kunde inte läsa konto: {e}")
+        return
+        
+    if not nuvarande:
+        st.warning(f"Konto {kontonr} hittades inte i räkenskapsår {ar_id}.")
+        return
+        
+    with st.form("kontoandring_form", clear_on_submit=True):
+        andringar = {}
+        # Dynamic rendering from _KONTO_ALLOWLIST
+        for nyckel, (namn, htext) in _KONTO_ALLOWLIST.items():
+            nuv_val = nuvarande.get(nyckel)
+            if isinstance(nuv_val, bool):
+                nytt_val = st.checkbox(namn, value=nuv_val, help=htext)
+                if nytt_val != nuv_val: andringar[nyckel] = nytt_val
+            else:
+                nytt_val = st.text_input(namn, value=str(nuv_val) if nuv_val is not None else "", help=htext)
+                if str(nytt_val) != str(nuv_val if nuv_val is not None else ""):
+                    # Very simple cast mapping (Spiris usually accepts strings except bools)
+                    andringar[nyckel] = nytt_val
+                    
+        from atgardsformular import KONTOANDRING
+        if st.form_submit_button("Skapa utkast"):
+            try:
+                payload = KONTOANDRING.bygg_nyttolast({
+                    "rakenskapsar_id": ar_id,
+                    "kontonr": kontonr,
+                    "nuvarande": nuvarande,
+                    "andringar": andringar
+                })
+                import utkast
+                utkast.skapa(KONTOANDRING.utkasttyp, payload)
+                st.success(f"Utkast skapat: {KONTOANDRING.rubrik}")
+            except ValueError as e:
+                st.error(str(e))
+
+def _rendera_periodiseringsandring_formular(st: Any) -> None:
+    st.subheader("Ändra periodisering")
+    klient = _bygg_klient()
+    
+    kopplingstyp = st.selectbox("Kopplingstyp", options=["Voucher", "SupplierInvoice", "SupplierInvoiceDraft"])
+    kopplings_id = st.text_input("Kopplings-ID")
+    kopplingsrad = st.text_input("Kopplingsrad")
+    
+    if not (kopplingstyp and kopplings_id and kopplingsrad):
+        st.info("Ange uppgifter för att hämta nuvarande periodisering.")
+        return
+        
+    # We must read current periodisering to show in summary.
+    from spiris_adapter import hamta_periodiseringar
+    try:
+        alla = hamta_periodiseringar(klient)
+        nuvarande = None
+        for p in alla:
+            if (str(p.get(kopplingstyp+"Id", "")) == str(kopplings_id) and 
+                str(p.get(kopplingstyp+"Row", "")) == str(kopplingsrad)):
+                nuvarande = p
+                break
+    except Exception as e:
+        st.error(f"Kunde inte läsa periodiseringar: {e}")
+        return
+        
+    if not nuvarande:
+        st.warning("Hittade ingen periodisering för dessa uppgifter.")
+        return
+        
+    with st.form("periodiseringsandring_form", clear_on_submit=True):
+        st.write(f"**Nuvarande plan:** {nuvarande.get('Period', 0)} perioder, belopp: {nuvarande.get('Total', 0)}")
+        
+        antal = st.number_input("Antal perioder", min_value=1, value=nuvarande.get('Period', 1))
+        startdatum = st.text_input("Startdatum", value=nuvarande.get('Date', ''))
+        belopp = st.text_input("Belopp", value=str(nuvarande.get('Total', '')))
+        konto = st.text_input("Konto", value=nuvarande.get('Account', ''))
+        
+        from atgardsformular import PERIODISERINGSANDRING
+        if st.form_submit_button("Skapa utkast"):
+            try:
+                payload = PERIODISERINGSANDRING.bygg_nyttolast({
+                    "kopplingstyp": kopplingstyp,
+                    "kopplings_id": kopplings_id,
+                    "kopplingsrad": int(kopplingsrad),
+                    "antal_perioder": int(antal),
+                    "startdatum": startdatum,
+                    "belopp": float(belopp),
+                    "konto": konto,
+                    "nuvarande_perioder": nuvarande.get('Period', 0),
+                    "nuvarande_belopp": nuvarande.get('Total', 0)
+                })
+                import utkast
+                utkast.skapa(PERIODISERINGSANDRING.utkasttyp, payload)
+                st.success(f"Utkast skapat: {PERIODISERINGSANDRING.rubrik}")
+            except ValueError as e:
+                st.error(str(e))
+
+def _rendera_periodiseringsborttagning_formular(st: Any) -> None:
+    st.subheader("Ta bort periodisering")
+    utkast_id = st.text_input("Leverantörsfakturautkast ID")
+    
+    if not utkast_id:
+        st.info("Ange utkast-ID för att fortsätta.")
+        return
+        
+    klient = _bygg_klient()
+    from spiris_adapter import hamta_periodiseringar
+    try:
+        alla = hamta_periodiseringar(klient)
+        traffar = [p for p in alla if str(p.get("SupplierInvoiceDraftId", "")) == str(utkast_id)]
+    except Exception as e:
+        st.error(f"Kunde inte hämta: {e}")
+        return
+        
+    if not traffar:
+        st.warning("Hittade inga periodiseringar för detta utkast.")
+        return
+        
+    # Check if there are any that have SupplierInvoiceDraftRow
+    traffar = [t for t in traffar if "SupplierInvoiceDraftRow" in t]
+    
+    with st.form("periodiseringsborttagning_form", clear_on_submit=True):
+        st.write(f"Hittade **{len(traffar)}** periodisering(ar) för detta utkast.")
+        st.warning("Tar bort ALLA periodiseringar på utkastet. Oåterkalleligt — det finns ingen väg tillbaka.")
+        
+        from atgardsformular import PERIODISERINGSBORTTAGNING
+        if st.form_submit_button("Skapa utkast"):
+            try:
+                payload = PERIODISERINGSBORTTAGNING.bygg_nyttolast({
+                    "leverantorsfakturautkast_id": utkast_id,
+                    "antal_perioder_som_forsvinner": len(traffar)
+                })
+                import utkast
+                utkast.skapa(PERIODISERINGSBORTTAGNING.utkasttyp, payload)
+                st.success(f"Utkast skapat: {PERIODISERINGSBORTTAGNING.rubrik}")
+            except ValueError as e:
+                st.error(str(e))
+
+
+
 def rendera_atgardsformular(st, formular) -> None:
+    if getattr(formular, "egen_ritare", None):
+        formular.egen_ritare(st)
+        return
+
     st.subheader(f"{formular.ikon} {formular.rubrik}")
     
     varden = {}
@@ -1286,7 +1768,42 @@ def rendera_atgardsformular(st, formular) -> None:
             
         for f in falt_att_rendera:
             lbl = f"{f.etikett} *" if f.obligatoriskt else f.etikett
-            if f.typ == "text":
+            if f.nyckel in ("bankkonto_id", "leverantor_id"):
+                klient = None
+                if st.session_state.get("spiris_tokens"):
+                    try:
+                        import app_config
+                        cfg = app_config.las_config()
+                        klient = _bygg_spiris_klient_fran_session(cfg.spiris_client_id, cfg.spiris_client_secret)
+                    except Exception:
+                        pass
+                
+                lista = []
+                if klient:
+                    try:
+                        if f.nyckel == "bankkonto_id":
+                            from spiris_adapter import hamta_bankkonton
+                            lista = hamta_bankkonton(klient)
+                        else:
+                            from spiris_adapter import hamta_leverantorer
+                            lista = hamta_leverantorer(klient)
+                    except Exception:
+                        pass
+                
+                if not lista:
+                    varden[f.nyckel] = st.text_input(lbl, help="Kunde inte hämta lista från Spiris. Ange ID manuellt.")
+                else:
+                    if f.nyckel == "bankkonto_id":
+                        options = {x["id"]: (x.get("namn") or x.get("bas_konto") or x["id"]) for x in lista}
+                    else:
+                        options = {x["Id"]: x.get("Name", x["Id"]) for x in lista}
+                    
+                    val_keys = [""] + list(options.keys())
+                    def _format_func(k, opts=options):
+                        return opts[k] if k else "(Välj...)"
+                        
+                    varden[f.nyckel] = st.selectbox(lbl, val_keys, format_func=_format_func, help=f.hjalptext, key=f"sel_{f.nyckel}")
+            elif f.typ == "text":
                 varden[f.nyckel] = st.text_input(lbl, help=f.hjalptext)
             elif f.typ == "tal":
                 varden[f.nyckel] = st.text_input(lbl, help=f.hjalptext)
@@ -1364,3 +1881,462 @@ def rendera_data() -> None:
                         
                 except Exception as e:
                     st.error(f"Kunde inte exportera: {e}")
+
+def _rendera_konto_formular(st: Any) -> None:
+    st.write("**Skapa nytt konto** — fyll i uppgifterna nedan.")
+    from parser.utkast import spara_utkast
+    import parser.spiris_adapter as spiris_adapter
+    
+    klient = st.session_state.get("klient")
+    if not klient:
+        st.error("Ingen klient. Du måste logga in.")
+        return
+        
+    ar_id = st.session_state.get("spiris_hamtat_ar")
+    if not ar_id:
+        st.error("Inget räkenskapsår är valt. Välj ett i sidomenyn.")
+        return
+        
+    try:
+        alla_ar = spiris_adapter.hamta_rakenskapsar(klient)
+        ar_obj = next((a for a in alla_ar if a.get("Id") == ar_id), None)
+        if ar_obj:
+            st.info(f"Gäller räkenskapsår: {str(ar_obj.get('StartDate', ''))[:10]} till {str(ar_obj.get('EndDate', ''))[:10]}")
+        else:
+            st.info(f"Gäller räkenskapsår (ID): {ar_id}")
+    except Exception as e:
+        st.error(f"Kunde inte hämta räkenskapsår: {e}")
+        return
+        
+    try:
+        momskoder = spiris_adapter.hamta_momskoder(klient)
+    except Exception as e:
+        st.error(f"Kunde inte hämta momskoder: {e}")
+        return
+
+    with st.form("konto_formular"):
+        kontonr = st.text_input("Kontonummer", max_chars=4)
+        kontonamn = st.text_input("Kontonamn")
+        aktiv = st.checkbox("Aktiv", value=True)
+        
+        kontotyper = ["Tillgang", "Skuld", "EgetKapital", "Intakt", "Kostnad"]
+        kontotyp = st.selectbox("Kontotyp (frivillig)", [""] + kontotyper)
+        
+        moms_options = {"Ingen": ""}
+        for m in momskoder:
+            moms_options[f"{m['kod']} - {m['beskrivning']}"] = m["kod"]
+            
+        valt_moms_label = st.selectbox("Momskod (frivillig)", list(moms_options.keys()))
+        momskod_id = moms_options[valt_moms_label]
+        
+        projekt = st.checkbox("Projekt tillåtet", value=False)
+        kostnad = st.checkbox("Kostnadsställe tillåtet", value=False)
+        sparrat = st.checkbox("Spärrat för manuell bokning", value=False)
+        
+        if st.form_submit_button("Skapa utkast"):
+            if not kontonr or not kontonamn:
+                st.error("Kontonummer och kontonamn är obligatoriska.")
+            else:
+                nyttolast = {
+                    "kontonr": kontonr,
+                    "kontonamn": kontonamn,
+                    "rakenskapsar_id": ar_id,
+                    "aktiv": "Ja" if aktiv else "Nej",
+                    "projekt_tillatet": "Ja" if projekt else "Nej",
+                    "kostnadsstalle_tillatet": "Ja" if kostnad else "Nej",
+                    "sparrat_for_manuell_bokning": "Ja" if sparrat else "Nej",
+                }
+                if kontotyp:
+                    nyttolast["kontotyp"] = kontotyp
+                if momskod_id:
+                    nyttolast["momskod_id"] = momskod_id
+                    
+                spara_utkast(
+                    typ="konto",
+                    nyttolast=nyttolast,
+                    sammanfattning=[
+                        ["Konto", f"{kontonr} - {kontonamn}"],
+                        ["Aktiv", nyttolast["aktiv"]],
+                        ["Momskod", momskod_id or "-"]
+                    ]
+                )
+
+def _rendera_kontoandring_formular(st: Any) -> None:
+    st.write("**Ändra konto** — välj vilket konto som ska ändras.")
+    from parser.utkast import spara_utkast
+    import parser.spiris_adapter as spiris_adapter
+    
+    klient = st.session_state.get("klient")
+    if not klient:
+        st.error("Ingen klient. Du måste logga in.")
+        return
+        
+    ar_id = st.session_state.get("spiris_hamtat_ar")
+    if not ar_id:
+        st.error("Inget räkenskapsår är valt. Välj ett i sidomenyn.")
+        return
+        
+    try:
+        alla_konton = spiris_adapter.hamta_kontoplan(klient, ar_id)
+    except Exception as e:
+        st.error(f"Kunde inte hämta kontoplan: {e}")
+        return
+
+    # 1. Välj konto
+    konto_options = {f"{k['kontonr']} - {k['kontonamn']}": k['kontonr'] for k in alla_konton}
+    valt_konto_label = st.selectbox("Vilket konto vill du ändra?", [""] + list(konto_options.keys()), key="kontoandring_konto_val")
+    
+    if not valt_konto_label:
+        return
+        
+    kontonr = konto_options[valt_konto_label]
+    
+    # Hämta komplett data för det valda kontot
+    try:
+        ra_konto = klient.hamta(f"/accounts/{ar_id}/{kontonr}")
+    except Exception as e:
+        st.error(f"Kunde inte hämta detaljer för konto {kontonr}: {e}")
+        return
+        
+    try:
+        momskoder = spiris_adapter.hamta_momskoder(klient)
+    except Exception as e:
+        st.error(f"Kunde inte hämta momskoder: {e}")
+        return
+        
+    # Extrahera nuvarande värden
+    nuvarande_namn = ra_konto.get("Description", "")
+    nuvarande_aktiv = bool(ra_konto.get("Active", True))
+    nuvarande_kontotyp = ra_konto.get("AccountType", "")
+    nuvarande_momskod = ra_konto.get("VatCode", "")
+    nuvarande_projekt = bool(ra_konto.get("ProjectAllowed", False))
+    nuvarande_kostnad = bool(ra_konto.get("CostCenterAllowed", False))
+    nuvarande_sparrat = bool(ra_konto.get("BlockedForManualBooking", False))
+
+    with st.form("kontoandring_formular"):
+        nytt_namn = st.text_input("Kontonamn", value=nuvarande_namn)
+        ny_aktiv = st.checkbox("Aktiv", value=nuvarande_aktiv)
+        
+        kontotyper = ["Tillgang", "Skuld", "EgetKapital", "Intakt", "Kostnad"]
+        try:
+            typ_idx = kontotyper.index(nuvarande_kontotyp) + 1
+        except ValueError:
+            typ_idx = 0
+            
+        ny_kontotyp = st.selectbox("Kontotyp (frivillig)", [""] + kontotyper, index=typ_idx)
+        
+        moms_options = {"Ingen": ""}
+        moms_keys = ["Ingen"]
+        moms_idx = 0
+        for i, m in enumerate(momskoder):
+            label = f"{m['kod']} - {m['beskrivning']}"
+            moms_options[label] = m["kod"]
+            moms_keys.append(label)
+            if m["kod"] == nuvarande_momskod:
+                moms_idx = i + 1
+                
+        valt_moms_label2 = st.selectbox("Momskod (frivillig)", moms_keys, index=moms_idx)
+        ny_momskod = moms_options[valt_moms_label2]
+        
+        nytt_projekt = st.checkbox("Projekt tillåtet", value=nuvarande_projekt)
+        nytt_kostnad = st.checkbox("Kostnadsställe tillåtet", value=nuvarande_kostnad)
+        nytt_sparrat = st.checkbox("Spärrat för manuell bokning", value=nuvarande_sparrat)
+        
+        if st.form_submit_button("Skapa utkast"):
+            # Samla in ändringar
+            andringar = {}
+            if nytt_namn != nuvarande_namn: andringar["kontonamn"] = nytt_namn
+            if ny_aktiv != nuvarande_aktiv: andringar["aktiv"] = "Ja" if ny_aktiv else "Nej"
+            if ny_kontotyp != nuvarande_kontotyp: andringar["kontotyp"] = ny_kontotyp
+            if ny_momskod != nuvarande_momskod: andringar["momskod_id"] = ny_momskod
+            if nytt_projekt != nuvarande_projekt: andringar["projekt_tillatet"] = "Ja" if nytt_projekt else "Nej"
+            if nytt_kostnad != nuvarande_kostnad: andringar["kostnadsstalle_tillatet"] = "Ja" if nytt_kostnad else "Nej"
+            if nytt_sparrat != nuvarande_sparrat: andringar["sparrat_for_manuell_bokning"] = "Ja" if nytt_sparrat else "Nej"
+            
+            if not andringar:
+                st.warning("Du har inte gjort några ändringar.")
+            else:
+                nuvarande_dict = {
+                    "kontonamn": nuvarande_namn,
+                    "aktiv": "Ja" if nuvarande_aktiv else "Nej",
+                    "kontotyp": nuvarande_kontotyp,
+                    "momskod_id": nuvarande_momskod,
+                    "projekt_tillatet": "Ja" if nuvarande_projekt else "Nej",
+                    "kostnadsstalle_tillatet": "Ja" if nuvarande_kostnad else "Nej",
+                    "sparrat_for_manuell_bokning": "Ja" if nuvarande_sparrat else "Nej",
+                }
+                
+                nyttolast = {
+                    "kontonr": kontonr,
+                    "rakenskapsar_id": ar_id,
+                    "nuvarande": nuvarande_dict,
+                    "andringar": andringar,
+                }
+                
+                sammanf = [["Konto", kontonr]]
+                for k, v in andringar.items():
+                    sammanf.append([f"Ny {k}", str(v)])
+                    
+                spara_utkast(
+                    typ="kontoandring",
+                    nyttolast=nyttolast,
+                    sammanfattning=sammanf
+                )
+
+def _rendera_periodiseringsandring_formular(st: Any) -> None:
+    st.write("**Ändra periodisering** — välj vilken periodisering du vill ändra.")
+    from parser.utkast import spara_utkast
+    
+    klient = st.session_state.get("klient")
+    if not klient:
+        st.error("Du måste vara inloggad.")
+        return
+        
+    try:
+        alla = klient.hamta_alla("/allocationperiods")
+    except Exception as e:
+        st.error(f"Kunde inte hämta periodiseringar: {e}")
+        return
+        
+    options = {}
+    for p in alla:
+        if not p.get("Id"): continue
+        namn = p.get("Description") or f"Periodisering {p.get('Id')}"
+        if p.get("VoucherId"):
+            namn += f" (Verifikat {p.get('VoucherId')})"
+        elif p.get("SupplierInvoiceId"):
+            namn += f" (Faktura {p.get('SupplierInvoiceId')})"
+        elif p.get("SupplierInvoiceDraftId"):
+            namn += f" (Utkast {p.get('SupplierInvoiceDraftId')})"
+            
+        options[namn] = p
+        
+    valt = st.selectbox("Vilken periodisering vill du ändra?", [""] + list(options.keys()))
+    if not valt:
+        return
+        
+    vald_p = options[valt]
+    
+    nuvarande_rader = vald_p.get("Rows", [])
+    nuvarande_antal_perioder = len(nuvarande_rader) if nuvarande_rader else 1
+    nuvarande_startdatum = nuvarande_rader[0].get("BookkeepingDate", "") if nuvarande_rader else ""
+    nuvarande_konto = vald_p.get("AllocationAccountNumber", "")
+    if not nuvarande_konto:
+        nuvarande_konto = vald_p.get("DebitAccountNumber", "")
+    
+    with st.form("periodiseringsandring_formular"):
+        nytt_konto = st.text_input("Konto", value=nuvarande_konto, max_chars=4)
+        ny_period = st.number_input("Antal perioder", value=nuvarande_antal_perioder, min_value=1)
+        nytt_startdatum = st.text_input("Startdatum (ÅÅÅÅ-MM-DD)", value=nuvarande_startdatum)
+        
+        if st.form_submit_button("Skapa utkast"):
+            if not nytt_konto or not ny_period or not nytt_startdatum:
+                st.error("Alla fält måste fyllas i.")
+            else:
+                nyttolast = {
+                    "konto": nytt_konto,
+                    "antal_perioder": int(ny_period),
+                    "startdatum": str(nytt_startdatum),
+                    "belopp": float(vald_p.get("Amount", 0)),
+                }
+                
+                if vald_p.get("VoucherId") and vald_p.get("VoucherRow") is not None:
+                    nyttolast["VoucherId"] = vald_p.get("VoucherId")
+                    nyttolast["VoucherRow"] = vald_p.get("VoucherRow")
+                elif vald_p.get("SupplierInvoiceId") and vald_p.get("SupplierInvoiceRow") is not None:
+                    nyttolast["SupplierInvoiceId"] = vald_p.get("SupplierInvoiceId")
+                    nyttolast["SupplierInvoiceRow"] = vald_p.get("SupplierInvoiceRow")
+                elif vald_p.get("SupplierInvoiceDraftId") and vald_p.get("SupplierInvoiceDraftRow") is not None:
+                    nyttolast["SupplierInvoiceDraftId"] = vald_p.get("SupplierInvoiceDraftId")
+                    nyttolast["SupplierInvoiceDraftRow"] = vald_p.get("SupplierInvoiceDraftRow")
+                else:
+                    st.error("Kunde inte avgöra källraden för denna periodisering (VoucherRow/SupplierInvoiceRow saknas).")
+                    return
+                    
+                spara_utkast(
+                    typ="periodiseringsandring",
+                    nyttolast=nyttolast,
+                    sammanfattning=[
+                        ["Konto", nytt_konto],
+                        ["Startdatum", nytt_startdatum],
+                        ["Antal perioder", str(ny_period)]
+                    ]
+                )
+
+def _rendera_periodiseringsborttagning_formular(st: Any) -> None:
+    st.write("**Ta bort periodisering**")
+    from parser.utkast import spara_utkast
+    
+    klient = st.session_state.get("klient")
+    if not klient:
+        st.error("Du måste vara inloggad.")
+        return
+        
+    try:
+        alla = klient.hamta_alla("/allocationperiods")
+    except Exception as e:
+        st.error(f"Kunde inte hämta periodiseringar: {e}")
+        return
+        
+    options = {}
+    for p in alla:
+        if not p.get("Id"): continue
+        namn = p.get("Description") or f"Periodisering {p.get('Id')}"
+        if p.get("SupplierInvoiceDraftId"):
+            namn += f" (Lev.faktura utkast {p.get('SupplierInvoiceDraftId')})"
+            options[namn] = p
+        
+    if not options:
+        st.info("Hittade inga periodiseringar på utkast som kan tas bort.")
+        return
+        
+    valt = st.selectbox("Vilken periodisering vill du ta bort?", [""] + list(options.keys()))
+    if not valt:
+        return
+        
+    vald_p = options[valt]
+    
+    with st.form("periodiseringsborttagning_formular"):
+        st.write("Vill du ta bort periodiseringen på utkastet?")
+        if st.form_submit_button("Skapa utkast för borttagning"):
+            nyttolast = {
+                "leverantorsfakturautkast_id": vald_p.get("SupplierInvoiceDraftId")
+            }
+            spara_utkast(
+                typ="periodiseringsborttagning",
+                nyttolast=nyttolast,
+                sammanfattning=[["Fakturautkast ID", str(vald_p.get("SupplierInvoiceDraftId"))]]
+            )
+
+def _rendera_kvittning_formular(st: Any) -> None:
+    st.write("**Kvitta fakturor** — välj en kreditfaktura för att se vilka debetfakturor som kan kvittas mot den.")
+    from parser.utkast import spara_utkast
+    import parser.spiris_adapter as spiris_adapter
+    import datetime
+    
+    klient = st.session_state.get("klient")
+    if not klient:
+        st.error("Ingen klient. Du måste logga in.")
+        return
+
+    # Fält 1: Kreditfaktura (nummer eller id)
+    kreditfaktura = st.text_input("Kreditfaktura (nummer eller id)", key="kvittning_kreditfaktura")
+    
+    if not kreditfaktura:
+        return
+        
+    # Försök hämta kandidater
+    try:
+        kandidater = spiris_adapter.hamta_kvittningskandidater(klient, kreditfaktura)
+    except Exception as e:
+        st.error(f"Kunde inte hämta kvittningskandidater för {kreditfaktura}: {e}")
+        return
+        
+    if not kandidater:
+        st.info("Inga kvittningskandidater hittades för denna kreditfaktura.")
+        return
+        
+    # Fält 2: Debetfakturor (flerval)
+    def formatera_kandidat(k):
+        return f"{k.get('SupplierName', '')} - {k.get('InvoiceNumber', '')} ({k.get('Id')}) - Belopp: {k.get('Balance', '')}"
+        
+    kand_map = {formatera_kandidat(k): k.get("Id") for k in kandidater}
+    valda_kandidater = st.multiselect("Debetfakturor att kvitta", list(kand_map.keys()), key="kvittning_kandidater")
+    
+    # Fält 3: Verifikatdatum
+    verifikatdatum = st.date_input("Verifikatdatum", value=datetime.date.today(), key="kvittning_datum")
+    
+    if st.button("Skapa utkast", key="kvittning_skapa"):
+        if not valda_kandidater:
+            st.error("Du måste välja minst en debetfaktura.")
+            return
+            
+        debet_ids = [kand_map[vk] for vk in valda_kandidater]
+        payload = {
+            "DebitInvoiceIds": debet_ids,
+            "VoucherDate": verifikatdatum.strftime("%Y-%m-%d")
+        }
+        
+        spara_utkast(
+            typ="kvittning",
+            nyttolast={
+                "kreditfaktura_id": kreditfaktura,
+                "payload": payload
+            },
+            sammanfattning=[
+                ["Kreditfaktura", kreditfaktura],
+                ["Valda debetfakturor", ", ".join(str(d) for d in debet_ids)],
+                ["Verifikatdatum", payload["VoucherDate"]]
+            ],
+            varning="Kvittningen kan inte ångras."
+        )
+
+def _rendera_underlagskoppling_formular(st: Any) -> None:
+    st.write("**Koppla underlag** — fyll i uppgifterna nedan.")
+    from parser.spiris_adapter import UNDERLAG_DOKUMENTTYPER, _adapter_underlag
+    import parser.spiris_adapter as spiris_adapter
+    from parser.utkast import spara_utkast
+    
+    klient = st.session_state.get("klient")
+    if not klient:
+        st.error("Ingen klient. Du måste logga in.")
+        return
+
+    val = st.selectbox("Dokumentslag", list(UNDERLAG_DOKUMENTTYPER.keys()))
+    dokument_typ, adapter_func_name = UNDERLAG_DOKUMENTTYPER[val]
+    
+    adapter_func = getattr(spiris_adapter, adapter_func_name)
+    try:
+        dokumentlista = adapter_func(klient)
+    except Exception as e:
+        st.error(f"Kunde inte hämta dokumentlista: {e}")
+        return
+
+    if not dokumentlista:
+        st.warning("Hittade inga dokument av den här typen.")
+        return
+
+    def formattera_dokument(d):
+        if val == "Leverantörsfaktura":
+            return f"{d.get('SupplierName', '')} - {d.get('InvoiceNumber', '')} ({d.get('Id')})"
+        else:
+            return f"Verifikat {d.get('VoucherNumber', '')} ({d.get('Id')})"
+    
+    dok_map = {formattera_dokument(d): d.get("Id") for d in dokumentlista}
+    valt_dok_str = st.selectbox("Dokument", list(dok_map.keys()))
+    dokument_id = dok_map[valt_dok_str] if valt_dok_str else ""
+
+    try:
+        underlag = _adapter_underlag(klient, include_matched=False)
+    except Exception as e:
+        st.error(f"Kunde inte hämta underlag: {e}")
+        return
+        
+    if not underlag:
+        st.warning("Hittade inga okopplade underlag.")
+        return
+        
+    und_map = {u.get("FileName", "Okänt filnamn"): u.get("Id") for u in underlag}
+    valt_und_str = st.selectbox("Underlag", list(und_map.keys()))
+    underlag_id = und_map[valt_und_str] if valt_und_str else ""
+    
+    if st.button("Skapa utkast"):
+        if not dokument_id or not underlag_id:
+            st.error("Du måste välja både dokument och underlag.")
+            return
+            
+        nyttolast = spiris_adapter.bygg_underlagskopplingspayload(underlag_id, dokument_id, dokument_typ)
+        
+        utkast_dir = st.session_state.get("utkast_dir", "utkast")
+        utkast_id = spara_utkast(
+            utkast_dir,
+            "underlagskoppling",
+            nyttolast,
+            [
+                ["Filnamn", valt_und_str],
+                ["Dokumentnummer", valt_dok_str],
+                ["DocumentType", dokument_typ]
+            ]
+        )
+        st.success(f"Utkast {utkast_id} skapat!")
+

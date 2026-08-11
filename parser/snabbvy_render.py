@@ -114,9 +114,14 @@ def _rendera_sektion(st, sektion: Sektion, data=None) -> None:
         st.caption(sektion.tomtext)
         return
         
-    # Rendera alltid standard HTML-tabellen så att stilen och högerställningen bevaras
-    st.markdown(_bygg_tabellhtml(sektion.tabell), unsafe_allow_html=True)
+    if getattr(sektion, "dold_detalj", False):
+        with st.expander("Visa detaljer"):
+            st.markdown(_bygg_tabellhtml(sektion.tabell), unsafe_allow_html=True)
+    else:
+        # Rendera alltid standard HTML-tabellen så att stilen och högerställningen bevaras
+        st.markdown(_bygg_tabellhtml(sektion.tabell), unsafe_allow_html=True)
     
+
     # --- Drill-down: fakturor per leverantör eller kund ---
     if sektion.drill_typ in ("leverantor", "kund") and data is not None:
         fakturor = (

@@ -836,10 +836,10 @@ def hamta_periodiseringar(klient: _Spirisklient) -> list[dict]:
 
 
 async def hamta_underlag(klient, include_matched: bool, offset: int = 0, limit: int = 0) -> dict:
-    from parser.spiris_adapter import _adapter_underlag
+    from parser.spiris_adapter import hamta_underlag
     from parser.sekretesslager import skapa_kontonamnsmaskerare
     
-    rå_data = await asyncio.to_thread(_adapter_underlag, klient, include_matched)
+    rå_data = await asyncio.to_thread(hamta_underlag, klient, include_matched)
     
     maskera = skapa_kontonamnsmaskerare(las_namnreferens())
     
@@ -868,11 +868,12 @@ async def hamta_underlag(klient, include_matched: bool, offset: int = 0, limit: 
 
 
 async def hamta_underlag_fil(klient, underlag_id: str) -> dict:
-    from parser.spiris_adapter import _adapter_hamta_underlag_fil
+    from parser.spiris_adapter import hamta_underlag_fil
     import asyncio
-    data = await asyncio.to_thread(_adapter_hamta_underlag_fil, klient, underlag_id)
+    meta, content = await asyncio.to_thread(hamta_underlag_fil, klient, underlag_id)
     from parser.spiris_rag import _envelope
-    return _envelope(data, antal_exkluderade=0)
+    # RAG shouldn't return binary, but if it does we just return meta.
+    return _envelope({'metadata': meta, 'storlek': len(content)}, antal_exkluderade=0)
 
 async def hamta_kvittningskandidater(klient, faktura_id: str) -> dict:
     kandidater = await asyncio.to_thread(_adapter_kvittningskandidater, klient, faktura_id)
@@ -891,64 +892,6 @@ async def hamta_kvittningskandidater(klient, faktura_id: str) -> dict:
     from parser.spiris_rag import _envelope
     return _envelope(res, antal_exkluderade=0)
 
-def hamta_prislistor(k, prislista_id: str | None = None) -> list[dict]:
-    """U16.1 — spiris_prislistor"""
-    if not prislista_id:
-        rader = k.hamta_alla("/salespricelists")
-        res = []
-        for r in rader:
-            res.append({
-                "Id": r.get("Id"),
-                "Name": r.get("Name"),
-                "Number": r.get("Number"),
-                "CurrencyCode": r.get("CurrencyCode"),
-                "IsStandard": r.get("IsStandard"),
-                "IsActive": r.get("IsActive"),
-            })
-        return res
-    else:
-        rader = k.hamta_alla(f"/salespricelists/prices/{prislista_id}")
-        res = []
-        for r in rader:
-            res.append({
-                "SalesPriceListId": r.get("SalesPriceListId"),
-                "ArticleId": r.get("ArticleId"),
-                "NetPrice": str(r.get("NetPrice")) if r.get("NetPrice") is not None else None,
-                "GrossPrice": str(r.get("GrossPrice")) if r.get("GrossPrice") is not None else None,
-                "CurrencyCode": r.get("CurrencyCode"),
-            })
-        return res
-
-
-def hamta_rabattavtal(k) -> list[dict]:
-    """U16.2 — spiris_rabattavtal"""
-    rader = k.hamta_alla("/discountagreements")
-    res = []
-    for r in rader:
-        res.append({
-            "Id": r.get("Id"),
-            "Name": r.get("Name"),
-            "Number": r.get("Number"),
-            "IsActive": r.get("IsActive"),
-        })
-    return res
-
-
-def hamta_etiketter(k, typ: str) -> list[dict]:
-    """U16.3 — spiris_etiketter"""
-    if typ not in ("kund", "artikel"):
-        raise ValueError(f"Okänd etiketttyp: {typ}. Måste vara 'kund' eller 'artikel'.")
-        
-    ep = "/customerlabels" if typ == "kund" else "/articlelabels"
-    rader = k.hamta_alla(ep)
-    res = []
-    for r in rader:
-        res.append({
-            "Id": r.get("Id"),
-            "Name": r.get("Name"),
-            "Description": r.get("Description"),
-        })
-    return res
 
 def hamta_en_verifikation(k, rakenskapsar_id: str, verifikation_id: str) -> dict:
     """U17.1 — spiris_verifikation"""

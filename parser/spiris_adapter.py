@@ -3317,6 +3317,54 @@ def hamta_verifikationer_alla(
         )
     return rader
 
+def hamta_kontotransaktioner(klient: _Spirisklient, rakenskapsar_id: str, kontonr: str) -> list[dict]:
+    """Alla transaktioner för ett konto under ett räkenskapsår (omaskerat)."""
+    rader = []
+    for rå in klient.hamta_alla(f"/vouchers/{rakenskapsar_id}"):
+        ver = mappa_verifikation(rå)
+        for tr in ver.transaktioner:
+            if tr.kontonr == kontonr:
+                rader.append({
+                    "plats": f"serie={ver.serie} vernr={ver.vernr}",
+                    "verdatum": str(ver.verdatum),
+                    "transtext": tr.transtext or "",
+                    "belopp": tr.belopp,
+                })
+    return rader
+
+def hamta_kontosaldon(klient: _Spirisklient, rakenskapsar_id: str, tom_datum: str) -> list[dict]:
+    """Ackumulerat utgående saldo (YTD) per konto fram till tom_datum (omaskerat)."""
+    konton = {}
+    for rå in klient.hamta_alla(f"/accounts/{rakenskapsar_id}"):
+        konto = mappa_konto(rå)
+        konton[konto.kontonr] = konto
+        
+    utgaende_balanser, resultat = mappa_saldon(klient.hamta_alla(f"/accountbalances/{tom_datum}"))
+    
+    data = []
+    for post in list(utgaende_balanser) + list(resultat):
+        konto = konton.get(post.kontonr)
+        data.append({
+            "kontonr": post.kontonr,
+            "kontonamn": konto.namn if konto else "",
+            "saldo": post.belopp,
+        })
+    return data
+
+def hamta_momsoversikt(klient: _Spirisklient, per_datum: str) -> dict:
+    """Omaskerad momsöversikt beräknad ur kontosaldon."""
+    from decimal import Decimal
+    rader = klient.hamta_alla(f"/accountbalances/{per_datum}")
+    konton = [
+        {
+            "kontonr": str(rad["AccountNumber"]),
+            "kontonamn": rad.get("AccountName", ""),
+            "saldo": Decimal(str(rad.get("Balance", 0))),
+        }
+        for rad in rader
+    ]
+    from fpa_motor import bygg_momsoversikt
+    return bygg_momsoversikt(konton, per_datum)
 
 def mappa_periodisering(p: dict) -> dict:
     if not p:
@@ -3485,38 +3533,18 @@ def hamta_anvandare(klient: _Spirisklient) -> list[dict]:
     return rader
 
 
-def _adapter_underlag(klient, include_matched: bool) -> list[dict]:
+def hamta_underlag(klient, include_matched: bool = False) -> list[dict]:
     return klient.hamta_alla("/attachments", params={"includeMatched": str(include_matched).lower()})
 
-def _adapter_hamta_underlag_fil(klient, underlag_id: str) -> dict[str, Any]:
-    # U4.3 spec
+def hamta_underlag_fil(klient, underlag_id: str) -> tuple[dict, bytes]:
     url = f"https://eaccountingapi.vismaonline.com/v2/attachments/{underlag_id}"
-    from pathlib import Path
-    import os
-    
-    # We must use U0.3's hamta_binart
     meta, content = klient.hamta_binart(url)
     
     if len(content) > 25 * 1024 * 1024:
         from parser.spiris_klient import SpirisKlientFel
         raise SpirisKlientFel("Underlaget är större än 25 MB och kan inte laddas ner.")
         
-    filnamn = meta.get("FileName") or f"{underlag_id}.pdf"
-    
-    import platform
-    home = Path.home()
-    dl_dir = home / "Downloads"
-    dl_dir.mkdir(parents=True, exist_ok=True)
-    
-    sokvag = dl_dir / filnamn
-    sokvag.write_bytes(content)
-    
-    return {
-        "sokvag": str(sokvag),
-        "filnamn": filnamn,
-        "storlek_byte": len(content),
-        "filtyp": meta.get("ContentType")
-    }
+    return meta, content
 
 
 def _bygg_betalningsverifikat_payload(nyttolast: dict) -> dict:
@@ -3596,6 +3624,11 @@ def bygg_periodiseringspayload(nyttolast: dict) -> list[dict]:
     return [p]
 
 
+UNDERLAG_DOKUMENTTYPER: dict[str, tuple[str, str]] = {
+    "Leverantörsfaktura": ("SupplierInvoice", "hamta_leverantorsfakturor"),
+    "Verifikat": ("Voucher", "hamta_verifikationer_alla"),
+}
+
 def bygg_underlagskopplingspayload(underlag_id: str, dokument_id: str, dokument_typ: str) -> dict:
     """Bygger nyttolasten för attachmentlinks."""
     return {
@@ -3639,3 +3672,63 @@ def hamta_en_bankhandelse(klient: _Spirisklient, bankkonto_id: str, handelse_id:
         "antal_konteringsrader": len(konteringar),
         "konteringar": konteringar,
     }
+
+
+def hamta_prislistor(k, prislista_id: str | None = None) -> list[dict]:
+    """U16.1 — spiris_prislistor"""
+    if not prislista_id:
+        rader = k.hamta_alla("/salespricelists")
+        res = []
+        for r in rader:
+            res.append({
+                "Id": r.get("Id"),
+                "Name": r.get("Name"),
+                "Number": r.get("Number"),
+                "CurrencyCode": r.get("CurrencyCode"),
+                "IsStandard": r.get("IsStandard"),
+                "IsActive": r.get("IsActive"),
+            })
+        return res
+    else:
+        rader = k.hamta_alla(f"/salespricelists/prices/{prislista_id}")
+        res = []
+        for r in rader:
+            res.append({
+                "SalesPriceListId": r.get("SalesPriceListId"),
+                "ArticleId": r.get("ArticleId"),
+                "NetPrice": str(r.get("NetPrice")) if r.get("NetPrice") is not None else None,
+                "GrossPrice": str(r.get("GrossPrice")) if r.get("GrossPrice") is not None else None,
+                "CurrencyCode": r.get("CurrencyCode"),
+            })
+        return res
+
+
+def hamta_rabattavtal(k) -> list[dict]:
+    """U16.2 — spiris_rabattavtal"""
+    rader = k.hamta_alla("/discountagreements")
+    res = []
+    for r in rader:
+        res.append({
+            "Id": r.get("Id"),
+            "Name": r.get("Name"),
+            "Number": r.get("Number"),
+            "IsActive": r.get("IsActive"),
+        })
+    return res
+
+
+def hamta_etiketter(k, typ: str) -> list[dict]:
+    """U16.3 — spiris_etiketter"""
+    if typ not in ("kund", "artikel"):
+        raise ValueError(f"Okänd etiketttyp: {typ}. Måste vara 'kund' eller 'artikel'.")
+        
+    ep = "/customerlabels" if typ == "kund" else "/articlelabels"
+    rader = k.hamta_alla(ep)
+    res = []
+    for r in rader:
+        res.append({
+            "Id": r.get("Id"),
+            "Name": r.get("Name"),
+            "Description": r.get("Description"),
+        })
+    return res

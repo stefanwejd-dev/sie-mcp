@@ -1690,3 +1690,64 @@ class TestU15_Enkeluppslag:
         kl.hamta_en = hamta_en_mock
         res = hamta_ett(kl, "verifikatutkast", "123")
         assert "verifikat" in res
+
+class TestU61_Lasfunktioner_Bockerna:
+    def test_hamta_kontotransaktioner(self):
+        from unittest.mock import MagicMock
+        mock_spiris_klient = MagicMock()
+        from parser.spiris_adapter import hamta_kontotransaktioner
+        from decimal import Decimal
+        
+        mock_spiris_klient.hamta_alla.return_value = [
+            {
+                "NumberSeries": "A",
+                "NumberAndNumberSeries": "A 1",
+                "VoucherDate": "2026-01-01",
+                "VoucherText": "Test 1",
+                "Rows": [
+                    {"AccountNumber": 1930, "Debit": 100, "Credit": 0, "TransactionText": "TR1"},
+                    {"AccountNumber": 3010, "Debit": 0, "Credit": 100, "TransactionText": "TR2"}
+                ]
+            }
+        ]
+        
+        res = hamta_kontotransaktioner(mock_spiris_klient, "FY1", "1930")
+        assert len(res) == 1
+        assert res[0]["belopp"] == Decimal("100")
+        assert res[0]["transtext"] == "TR1"
+        assert res[0]["plats"] == "serie=A vernr=1"
+
+    def test_hamta_kontosaldon(self):
+        from unittest.mock import MagicMock
+        mock_spiris_klient = MagicMock()
+        from parser.spiris_adapter import hamta_kontosaldon
+        from decimal import Decimal
+        
+        def _mock_hamta_alla(url, **kwargs):
+            if "accounts" in url:
+                return [{"Number": 1930, "Name": "Bank", "FiscalYearId": 1, "IsActive": True}]
+            if "accountbalances" in url:
+                return [{"AccountNumber": 1930, "Balance": 100}]
+            return []
+            
+        mock_spiris_klient.hamta_alla.side_effect = _mock_hamta_alla
+        
+        res = hamta_kontosaldon(mock_spiris_klient, "FY1", "2026-12-31")
+        assert len(res) == 1
+        assert res[0]["kontonr"] == "1930"
+        assert res[0]["kontonamn"] == "Bank"
+        assert res[0]["saldo"] == Decimal("100")
+
+    def test_hamta_momsoversikt(self):
+        from unittest.mock import MagicMock
+        mock_spiris_klient = MagicMock()
+        from parser.spiris_adapter import hamta_momsoversikt
+        
+        mock_spiris_klient.hamta_alla.return_value = [
+            {"AccountNumber": 2611, "AccountName": "Moms", "Balance": -1000},
+            {"AccountNumber": 3000, "AccountName": "Intäkt", "Balance": -4000}
+        ]
+        
+        res = hamta_momsoversikt(mock_spiris_klient, "2026-12-31")
+        assert isinstance(res, dict)
+        assert "period" in res

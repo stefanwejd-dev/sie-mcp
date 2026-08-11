@@ -79,6 +79,7 @@ GILTIGA_TYPER = (
     "betalningsregistrering",
     "makulering",
     # Steg 5b: offert- och orderkedjan.
+    "offertutkast",
     "saljdokumentutskick",
     "efakturautskick",
     "saljdokumentatgard",

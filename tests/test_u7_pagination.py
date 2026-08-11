@@ -131,7 +131,7 @@ def test_spiris_underlag_har_pagination(monkeypatch):
     def mock_underlag(k, include_matched):
         return [{"Id": str(i)} for i in range(3)]
         
-    monkeypatch.setattr(adapter, "_adapter_underlag", mock_underlag)
+    monkeypatch.setattr(adapter, "hamta_underlag", mock_underlag)
     monkeypatch.setattr(rag, "skapa_kontonamnsmaskerare", lambda x: lambda text: text)
     
     klient = DummyKlient()
