@@ -7,8 +7,6 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
-import pytest
-
 from _sie_fixtures import bygg_sie
 from domain_model import SIEFil
 
@@ -77,12 +75,9 @@ def test_konton_namn_kan_anges_explicit():
     assert sie.konton["1930"].namn == "Bankkonto"
 
 
-@pytest.mark.xfail(
-    reason="Väntar på grupp A–C (steg 3–5) — då ska en balanserad default-bokföring "
-    "ge noll fynd från hela motorn.",
-    strict=False,
-)
 def test_default_bygg_sie_ger_noll_fynd_fran_hela_motorn():
+    """Grupp A–C (steg 3–5) klara — vänder xfail-testet från steg 2 till ett
+    vanligt, grönt test (§7 steg 5, acceptans)."""
     import bokslutskontroll.kontroller  # noqa: F401  — fyller registret
     from bokslutskontroll.motor import kor_kontroller
 

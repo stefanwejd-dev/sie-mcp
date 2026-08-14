@@ -8,3 +8,5 @@ from __future__ import annotations
 
 from . import integritet  # noqa: F401
 from . import saldologik  # noqa: F401
+from . import bokslutsposter  # noqa: F401
+from . import kontotyper  # noqa: F401

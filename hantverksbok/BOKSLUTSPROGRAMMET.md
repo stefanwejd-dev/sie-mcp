@@ -1,7 +1,8 @@
 # Bokslutsprogrammet — lagerkarta och genomförande
 
 **Status:** lager 1 under genomförande — se `BOKSLUTSKONTROLLER.md` för
-detaljerad status (steg 1–4 av 9 klara). Lager 1b, 2, 3 och 4 är fortfarande
+detaljerad status (steg 1–5 av 9 klara; alla sexton kontroller finns nu i
+motorn, MCP-verktyget och vyn återstår). Lager 1b, 2, 3 och 4 är fortfarande
 bara specificerade.
 **Skriven:** 2026-08-14 · **Uppdaterad:** 2026-08-14
 **Arkitekt:** Claude · **Utförare:** kod-AI · **Granskare:** Claude, efteråt

@@ -1,8 +1,11 @@
 # Bokslutskontroller — arkitektur och genomförande
 
-**Status:** genomförande pågår — steg 1–4 av 9 klara (modell, register, motor,
-fixturbyggare, grupp A, grupp B). Grupp C (steg 5) återstår innan
-`test_default_bygg_sie_ger_noll_fynd_fran_hela_motorn` kan sluta vara `xfail`.
+**Status:** genomförande pågår — steg 1–5 av 9 klara (modell, register, motor,
+fixturbyggare, grupp A, grupp B, grupp C). Alla sexton kontroller finns nu i
+motorn; `test_default_bygg_sie_ger_noll_fynd_fran_hela_motorn` är grönt, inte
+längre `xfail`. Steg 6 (dedikerade väsentlighets-/regeltest — själva
+berikningslogiken låg redan i `motor.py` sedan steg 1), steg 7 (MCP-verktyget)
+och steg 8 (vyn) återstår.
 **Skriven:** 2026-08-14 · **Uppdaterad:** 2026-08-14
 **Arkitekt:** Claude · **Utförare:** kod-AI · **Granskare:** Claude, efteråt
 
