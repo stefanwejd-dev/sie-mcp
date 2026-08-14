@@ -57,6 +57,22 @@ momssats_normal = "0.25"
 # ska visas som osäkra — se BOKSLUTSPROGRAMMET.md §4.3.
 matchningsfonster_dagar = 5
 
+# A-03, pass 3 (parkoppling). Två rader som avser samma händelse med olika
+# belopp — typiskt en bankavgift, en växlingskurs eller en öresavrundning —
+# slås ihop till ETT fynd i stället för en A-01 och en A-02 för samma sak.
+#
+# Två gränser, och den generösare vinner. En ren procentsats missar små
+# betalningar (12 kr avgift på 100 kr är 12 %); ett rent kronbelopp missar
+# stora (12 kr på 500 000 kr är brus). Villkoret är alltså
+#   diff <= max(avstamning_beloppsdiff_kronor, avstamning_beloppsdiff_andel * |belopp|)
+#
+# Vidare gränser ger fler parkopplingar och därmed fler felaktiga sådana.
+# Snävare ger fler dubbelrapporterade händelser (både A-01 och A-02). A-03 är
+# `observation` just för att parkopplingen är en gissning — se
+# BOKSLUTSPROGRAMMET.md §4.3.1.
+avstamning_beloppsdiff_kronor = "50.00"
+avstamning_beloppsdiff_andel = "0.02"
+
 # K-10: full arbetsgivaravgift = arbetsgivaravgifter enligt socialavgiftslagen
 # PLUS allmän löneavgift. Båda leden anges var för sig, eftersom de ändras i
 # olika lagar och vid olika tillfällen.

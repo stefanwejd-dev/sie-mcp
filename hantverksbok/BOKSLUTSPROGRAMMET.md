@@ -115,7 +115,7 @@ de bokförda transaktionerna på motsvarande konto. Tre sorters fynd:
 |---|---|---|---|
 | **A-01** | Banktransaktion saknas i bokföringen | Raden finns på utdraget men inte bokförd — det här är "saker jag missat att exportera" | **avvikelse** |
 | **A-02** | Bokförd post saknas på kontoutdraget | Bokförd men aldrig genomförd, eller bokförd på fel konto | observation |
-| **A-03** | Beloppet skiljer | Matchad på datum och motpart, men olika belopp | observation |
+| **A-03** | Beloppet skiljer | En utdragsrad och en bokförd post som sannolikt avser samma händelse, men med olika belopp — parkopplade på datum och belopp, aldrig på motpart (§4.3.1) | observation |
 | **A-04** | Utgående saldo stämmer inte | Kontoutdragets slutsaldo ≠ kontots `#UB` | **avvikelse** |
 | **A-05** | Kontoutdraget täcker inte hela räkenskapsåret | Avstämningen är ofullständig och får inte tolkas som ren | upplysning |
 
@@ -153,17 +153,67 @@ gränssnittet i stället för att låta användaren leta efter en knapp som inte
 
 ### 4.3 Matchningen
 
-Deterministisk, i tre pass, och **aldrig med en språkmodell**:
+Deterministisk, i fyra pass, och **aldrig med en språkmodell**:
 
 1. **Exakt:** samma datum och samma belopp → matchad.
 2. **Nära i tid:** samma belopp inom ± `matchningsfonster_dagar` → matchad,
    men markerad som osäker och visad som sådan.
-3. **Rest:** allt omatchat blir A-01 respektive A-02.
+3. **Parkoppling av resten:** se §4.3.1. Ger A-03.
+4. **Rest:** allt fortfarande omatchat blir A-01 respektive A-02.
 
-Ett belopp får matchas mot **exakt en** motpart. Två bokförda poster på 1 000 kr
-och en utdragsrad på 1 000 kr ger en match och en A-02 — inte två matcher.
-Detta är den lättaste buggen att skriva och den svåraste att upptäcka: skriv
-testet först.
+Ett belopp får matchas mot **exakt en** motpart, och regeln gäller genom alla
+fyra passen. Två bokförda poster på 1 000 kr och en utdragsrad på 1 000 kr ger
+en match och en A-02 — inte två matcher. Detta är den lättaste buggen att
+skriva och den svåraste att upptäcka: skriv testet först.
+
+#### 4.3.1 Pass 3 — parkoppling, och varför A-03 inte är en matchningsregel
+
+Pass 1 och 2 matchar bara på **lika** belopp. A-03 handlar per definition om
+olika belopp och kan därför aldrig uppstå ur dem. Det var en motsägelse i den
+här specen, upptäckt vid genomförandet 2026-08-14 och löst så här.
+
+**Varför den uppenbara lösningen är förbjuden.** Det naturliga vore ett pass som
+matchar på motpart eller text när beloppen skiljer sig. Det får inte byggas.
+Motpartsfältet och texten är fritext, och fritext maskeras på MCP-vägen
+(`BOKSLUTSKONTROLLER.md` B-5 och I-3). En kontroll som matchar på fritext skulle
+**ge olika fynd i appen och via MCP för samma bokföring** — och hela skälet till
+att maskera före kontrollen i stället för efter är att maskeringen inte ska
+kunna påverka ett kontrollutfall. Ingen kontroll, i något lager, får läsa
+fritext som beslutsunderlag. Det är en invariant, inte en preferens.
+
+Kvar finns bara två strukturerade dimensioner som överlever maskeringen: **datum
+och belopp**. Fyra pass är därför allt som går att bygga ärligt.
+
+**Vad pass 3 gör.** Det matchar ingenting nytt — det **parkopplar resten**. Efter
+pass 1 och 2 finns omatchade utdragsrader och omatchade bokförda poster kvar.
+Ett par av dem som avser samma händelse med olika belopp skulle annars ge
+*både* en A-01 *och* en A-02 för en och samma sak, vilket är förvirrande och
+dubbelräknar. Pass 3 slår ihop ett sådant par till **ett** A-03.
+
+Villkor för att två rader ska parkopplas:
+
+* datumen ligger inom ± `matchningsfonster_dagar`,
+* beloppen har **samma tecken** (normaliserade till effekt på kontot), och
+* beloppsskillnaden är högst
+  `max(avstamning_beloppsdiff_kronor, avstamning_beloppsdiff_andel × |belopp|)`.
+
+Båda parametrarna finns i registret. Två gränser i stället för en, därför att
+en ren procentsats missar små betalningar (12 kr avgift på 100 kr är 12 %) och
+ett rent kronbelopp missar stora (12 kr på 500 000 kr är brus).
+
+**Ordningen är bindande, för determinismen (I-5):** para giriskt, med minsta
+relativa skillnad först; vid lika skillnad avgör tidigast datum, därefter minsta
+belopp, därefter radordningen i utdraget. Två körningar på samma underlag ska ge
+samma parkopplingar.
+
+**En parkoppling är en gissning, och ska sägas vara det.** Två obesläktade
+poster av liknande storlek nära varandra i tiden kan parkopplas felaktigt —
+det finns ingen information i underlaget som kan utesluta det. Därför är A-03
+`observation`, och därför ska motiveringen visa **båda** raderna med datum och
+belopp, så att människan kan se vad som parades ihop och underkänna det.
+
+Rader som inte kan parkopplas faller igenom till pass 4 och blir A-01 eller
+A-02 som förut.
 
 ### 4.4 Sekretess — läs detta innan du rör en rad
 
