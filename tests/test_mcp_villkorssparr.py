@@ -30,6 +30,8 @@ from mcp_server.server import (
     spiris_sie4export,
     berakna_vasentlighet,
     granska_kontotyper,
+    bokslutskontroll,
+    spiris_bokslutskontroll,
     spiris_artiklar,
     spiris_balansrapport,
     spiris_bankkonton,
@@ -67,7 +69,7 @@ from mcp_server.server import (
     spiris_kvittningskandidater,
 )
 
-FILVERKTYG = [berakna_vasentlighet, granska_kontotyper]
+FILVERKTYG = [berakna_vasentlighet, granska_kontotyper, bokslutskontroll]
 
 # Namn -> giltiga argument. Varje Spiris-verktyg i registret MÅSTE finnas här;
 # test_alla_spirisverktyg_ar_tackta_av_sparrsviten bevakar det. Utan den
@@ -128,6 +130,7 @@ SPIRIS_ARGUMENT: dict[str, tuple] = {
     "spiris_bokforingslas": (),
     "spiris_verifikation": ("fy-1", "v-1"),
     "spiris_bankhandelse": ("b-1", "t-1"),
+    "spiris_bokslutskontroll": ("fy-2026", "2026-12-31"),
 }
 
 _SPIRISFUNKTIONER = {
@@ -185,6 +188,7 @@ _SPIRISFUNKTIONER = {
     "spiris_verifikation": server_modul.spiris_verifikation,
     "spiris_bankhandelse": server_modul.spiris_bankhandelse,
     "spiris_bokforingslas": spiris_bokforingslas,
+    "spiris_bokslutskontroll": spiris_bokslutskontroll,
 }
 
 SPIRISVERKTYG = [
@@ -324,7 +328,7 @@ def test_alla_registrerade_verktyg_har_ett_sparrtest():
         "hamta_ett", "ingaende_balans", "kontoplan_alla", "kundfakturor", "verifikationer_alla", "valutakurs", "anlaggningstillgangar", "kundreskontraposter", "anvandare", "periodiseringar"}
     tackta = (
         set(SPIRIS_ARGUMENT)
-        | {"berakna_vasentlighet", "granska_kontotyper"}
+        | {"berakna_vasentlighet", "granska_kontotyper", "bokslutskontroll"}
         | {"forbered_kund", "forbered_kundfaktura", "forbered_verifikat",
            "kontrollera_utkast"}
         | {"forbered_fakturautskick", "forbered_betalningspaminnelse",

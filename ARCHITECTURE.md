@@ -1439,6 +1439,54 @@ fail-closed (AttributeError, alltså ett fångat fel — ingen läcka), men
 strängjämförelsen överlever omladdningen.
 
 
+## §3e Bokslutskontroller (tillägg 2026-08-14) — lager 1, se hantverksboken
+
+Två verktyg ovanpå det deterministiska kontrollskiktet i `bokslutskontroll/`
+(§2 ovan; full spec i `hantverksbok/BOKSLUTSKONTROLLER.md`):
+
+| Verktyg | Indata | Väg |
+|---|---|---|
+| `bokslutskontroll` | `sokvag: str` | fil, samma mönster som §3 |
+| `spiris_bokslutskontroll` | `rakenskapsar_id: str, tom_datum: str` | Spiris live, samma mönster som §3b |
+
+Svarsformen är gemensam:
+
+```python
+{
+    "fynd": [
+        {
+            "kontroll_id": str, "rubrik": str,
+            "allvarlighet": "avvikelse" | "observation" | "upplysning",
+            "motivering": str, "konton": list[str], "verifikationer": list[str],
+            "belopp": float | None, "vasentlig": bool | None,
+            "regel": {"kalla": str, "beteckning": str, "lank_manniska": str,
+                      "lank_maskin": str | None, "kommentar": str | None} | None,
+            "forslag": {"beskrivning": str, "rader": [...], "forbehall": str | None} | None,
+        },
+        ...
+    ] | None,
+    "sammanfattning": {"avvikelse": int, "observation": int, "upplysning": int} | None,
+    "tolkningsbehov_antal": int,
+    "fel": str | None,
+}
+```
+
+**Adaptergränsen (arkitekturregel från §3b, `test_mcp_servern_gar_aldrig_forbi_spiris_rag`)
+höll på att brytas här.** Hantverksbokens instruktion ("hämtar via
+`hamta_siefil_fran_spiris`") lästes först bokstavligt som en direktimport i
+`mcp_server/server.py` — det hade gått förbi `spiris_rag.py`, den enda platsen
+adaptern får korsas. Löst genom att lägga glueet (hämtning + maskering + motor
++ `sakerhetsnot`) som `spiris_rag.hamta_bokslutskontroll()` i stället; servern
+anropar den genom det befintliga `_kor_spiris_verktyg`-omslaget precis som
+alla andra `spiris_*`-verktyg. Samma mekanism, rätt modul.
+
+I-3 gäller som överallt annars i lager 1: `bokslutskontroll` maskerar filen
+innan motorn körs, `spiris_bokslutskontroll` ärver maskeringen från
+`spiris_rag`. Streamlit-vyn (steg 8, ej byggd än) ska köra motorn mot den RÅA
+`SIEFil`:en — se `hantverksbok/BOKSLUTSKONTROLLER.md` §7 steg 8 och
+`hantverksbok/UI_ATGARDER_I_VYN.md`.
+
+
 ## §4 Felhantering
 
 Samma princip som resten av projektet, applicerad på serverlagret:
@@ -1612,7 +1660,7 @@ smalare, läsorienterad delmängd (§1–§3b ovan).
 | `formatering.py` | 28 | Universell sifferformatering (decimaler, tusentalsavgränsare) | Aktiv |
 | `formatering_ui.py` | 46 | Sidomenyns formateringsval | Aktiv |
 | `utkast.py` | 292 | Lokal kö för FÖRESLAGNA skrivningar (§3c) — hashbunden, 24 h | Aktiv |
-| `bokslutskontroll/` | — | **Paket** (undantag från flat-fil-mönstret, se B-6 i hantverksboken). Deterministiskt kontrollskikt `SIEFil -> list[Fynd]` — lager 1 i `hantverksbok/BOKSLUTSPROGRAMMET.md`. Alla tre kontrollgrupper klara (K-01–K-15, K-00 reserverat): grupp A (bokföringsteknisk integritet), grupp B (saldologik), grupp C (bokslutsposter + kontotypbron). MCP-verktyget och vyn återstår. Detaljerad status i `hantverksbok/BOKSLUTSKONTROLLER.md`. | Under uppbyggnad |
+| `bokslutskontroll/` | — | **Paket** (undantag från flat-fil-mönstret, se B-6 i hantverksboken). Deterministiskt kontrollskikt `SIEFil -> list[Fynd]` — lager 1 i `hantverksbok/BOKSLUTSPROGRAMMET.md`. Alla tre kontrollgrupper klara (K-01–K-15, K-00 reserverat): grupp A (bokföringsteknisk integritet), grupp B (saldologik), grupp C (bokslutsposter + kontotypbron). Nåbart via MCP (`bokslutskontroll`/`spiris_bokslutskontroll`, se §3 nedan). Vyn (steg 8) återstår. Detaljerad status i `hantverksbok/BOKSLUTSKONTROLLER.md`. | Under uppbyggnad |
 
 "Aktiv" = förändrad under de senaste utvecklingsomgångarna (Spiris-
 skrivvägen, AI-agenten, likviditetsprognosen); "Stabil" = oförändrad sedan

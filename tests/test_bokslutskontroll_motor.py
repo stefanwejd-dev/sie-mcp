@@ -1,6 +1,7 @@
-"""Steg 1 — test av bokslutskontroll.motor.
+"""Steg 1 och 6 — test av bokslutskontroll.motor.
 
-Se hantverksbok/BOKSLUTSKONTROLLER.md §5 (steg 1, acceptans)."""
+Se hantverksbok/BOKSLUTSKONTROLLER.md §5 (steg 1, acceptans) och §7 steg 6
+(väsentlighet och regelhänvisningar, centralt i motorn)."""
 
 from __future__ import annotations
 
@@ -9,19 +10,24 @@ from decimal import Decimal
 
 import pytest
 
-from bokslutskontroll.modell import Fynd, Kontext
+from _sie_fixtures import bygg_sie
+
+from bokslutskontroll.modell import Fynd, Kontext, Regelhanvisning
 from bokslutskontroll import motor
 from bokslutskontroll.motor import kor_kontroller, registrera
+from bokslutskontroll.regelkalla import kontroll_ider
 from domain_model import SIEFil
 
 
 @pytest.fixture(autouse=True)
 def _tomt_register():
     """Varje test får ett eget, tomt KONTROLLER-register så att testerna inte
-    stör varandra eller de riktiga kontrollerna (som ännu inte finns)."""
+    stör varandra eller de riktiga kontrollerna. Fixturen ger tillbaka den
+    riktiga, sparade registerinnehållet — så att ett test som vill pröva mot
+    det (t.ex. I-4-testet) kan be om det via fixturens returvärde."""
     sparat = dict(motor.KONTROLLER)
     motor.KONTROLLER.clear()
-    yield
+    yield sparat
     motor.KONTROLLER.clear()
     motor.KONTROLLER.update(sparat)
 
@@ -153,3 +159,101 @@ def test_regel_och_vasentlighet_berikas_centralt():
     assert len(fynd) == 1
     assert fynd[0].regel is not None
     assert fynd[0].regel.beteckning == "5 kap. 1 §"
+
+
+# --- Steg 6 — väsentlighet och regelhänvisningar --------------------------
+
+
+def test_kontroll_som_satter_egen_regel_behaller_den():
+    """Motorn skriver bara över `regel` när den är None. Den mekanismen finns
+    för att en kontroll (t.ex. en framtida variant av K-14, vars hänvisning
+    kan skilja sig från de övrigas) ska kunna ge ett fynd en egen,
+    mer specifik hänvisning än den generiska som ligger i registret."""
+    egen_regel = Regelhanvisning(
+        kalla="Egen källa",
+        beteckning="särskild motivering",
+        lank_manniska="https://example.invalid/egen",
+    )
+
+    @registrera("K-01")
+    def _k1(kontext: Kontext) -> list[Fynd]:
+        return [
+            Fynd(
+                kontroll_id="K-01",
+                rubrik="Balansräkningen går inte ihop",
+                allvarlighet="avvikelse",
+                motivering="x",
+                belopp=Decimal("100"),
+                regel=egen_regel,
+            )
+        ]
+
+    fynd = kor_kontroller(SIEFil(), idag=date(2026, 8, 14))
+    assert len(fynd) == 1
+    assert fynd[0].regel is egen_regel
+
+
+def test_vasentlig_ar_none_inte_false_utan_berakningsbart_vasentlighetstal():
+    """Tom bokföring (ingen omsättning) → väsentlighetstalet går inte att
+    beräkna → vasentlig ska förbli None, aldrig False."""
+
+    @registrera("K-01")
+    def _k1(kontext: Kontext) -> list[Fynd]:
+        return [
+            Fynd(
+                kontroll_id="K-01",
+                rubrik="Balansräkningen går inte ihop",
+                allvarlighet="avvikelse",
+                motivering="x",
+                belopp=Decimal("100"),
+            )
+        ]
+
+    fynd = kor_kontroller(bygg_sie(), idag=date(2026, 8, 14))
+    assert len(fynd) == 1
+    assert fynd[0].vasentlig is None
+
+
+def test_vasentlig_satts_ratt_nar_vasentlighetstal_gar_att_berakna():
+    """Med en omsättning på 1 000 000 kr blir utfallsväsentligheten (75 % av
+    0,5 % av omsättningen) 3 750 kr — se analysflode.berakna_standardtroskelvarden.
+    Ett fynd över tröskeln ska bli vasentlig=True, ett under ska bli False."""
+    sie = bygg_sie(res={"3010": "-1000000"})
+
+    @registrera("K-01")
+    def _over(kontext: Kontext) -> list[Fynd]:
+        return [
+            Fynd(
+                kontroll_id="K-01",
+                rubrik="Över tröskeln",
+                allvarlighet="avvikelse",
+                motivering="x",
+                belopp=Decimal("4000"),
+            )
+        ]
+
+    @registrera("K-02")
+    def _under(kontext: Kontext) -> list[Fynd]:
+        return [
+            Fynd(
+                kontroll_id="K-02",
+                rubrik="Under tröskeln",
+                allvarlighet="avvikelse",
+                motivering="y",
+                belopp=Decimal("1000"),
+            )
+        ]
+
+    fynd = kor_kontroller(sie, idag=date(2026, 8, 14))
+    per_id = {f.kontroll_id: f for f in fynd}
+    assert per_id["K-01"].vasentlig is True
+    assert per_id["K-02"].vasentlig is False
+
+
+def test_varje_registrerad_kontroll_finns_i_registret_och_tvartom(_tomt_register):
+    """I-4, båda hållen: varje id som faktiskt är registrerat i koden ska
+    finnas i regelregistret (K-00 undantaget — det är motorns eget,
+    regelfria fynd, se §5 K-00)."""
+    ider_i_koden = set(_tomt_register)
+    ider_i_registret = kontroll_ider() - {"K-00"}
+    assert ider_i_koden == ider_i_registret

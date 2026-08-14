@@ -1,11 +1,10 @@
 # Bokslutskontroller — arkitektur och genomförande
 
-**Status:** genomförande pågår — steg 1–5 av 9 klara (modell, register, motor,
-fixturbyggare, grupp A, grupp B, grupp C). Alla sexton kontroller finns nu i
-motorn; `test_default_bygg_sie_ger_noll_fynd_fran_hela_motorn` är grönt, inte
-längre `xfail`. Steg 6 (dedikerade väsentlighets-/regeltest — själva
-berikningslogiken låg redan i `motor.py` sedan steg 1), steg 7 (MCP-verktyget)
-och steg 8 (vyn) återstår.
+**Status:** genomförande pågår — steg 1–7 av 9 klara (modell, register, motor,
+fixturbyggare, grupp A, grupp B, grupp C, väsentlighets-/regeltest, MCP-
+verktygen). `bokslutskontroll` och `spiris_bokslutskontroll` finns nu i
+MCP-ytan och passerar de befintliga metatesterna. Steg 8 (vyn) återstår; steg
+9 (regelhänvisningarnas kvalitet) är valfritt och görs sist av allt.
 **Skriven:** 2026-08-14 · **Uppdaterad:** 2026-08-14
 **Arkitekt:** Claude · **Utförare:** kod-AI · **Granskare:** Claude, efteråt
 

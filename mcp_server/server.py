@@ -93,9 +93,10 @@ import sessionslogg
 import spiris_rag
 import juridik_api
 import utkast
+from bokslutskontroll import kor_kontroller as _kor_bokslutskontroller
 from kontotyp_vakt import analysera_kontotyper
 from namnreferens import las_namnreferens
-from sekretesslager import skapa_kontonamnsmaskerare
+from sekretesslager import maskera_siefil, skapa_kontonamnsmaskerare
 from sie4_parser import parse_sie4
 from spiris_session import SpirisSessionFel, bygg_klient, json_sakert, spara_session
 from vasentlighet import berakna_vasentlighet as _berakna_vasentlighet
@@ -326,6 +327,116 @@ def granska_kontotyper(sokvag: str) -> dict:
             }
             for avvikelse in avvikelser
         ],
+        "tolkningsbehov_antal": len(sie.tolkningsbehov),
+        "fel": None,
+    }
+
+
+# --- Bokslutskontroller (lager 1) -------------------------------------------
+# Se hantverksbok/BOKSLUTSKONTROLLER.md. Motorn (bokslutskontroll.kor_kontroller)
+# är ett deterministiskt kontrollskikt — ingen språkmodell avgör vad som är
+# ett fynd. Servern gör bara koreografin: läs, maskera, kör motorn, serialisera.
+# I-3 (den lättaste regeln att få katastrofalt fel): MCP-vägen maskerar ALLTID
+# före kontrollen. Streamlit-appens rum (parser/rum_render.py) kör motorn mot
+# den råa SIEFil:en — se hantverksbok/BOKSLUTSKONTROLLER.md §7 steg 8.
+
+
+def _regelhanvisning_till_dict(regel) -> dict | None:
+    if regel is None:
+        return None
+    return {
+        "kalla": regel.kalla,
+        "beteckning": regel.beteckning,
+        "lank_manniska": regel.lank_manniska,
+        "lank_maskin": regel.lank_maskin,
+        "kommentar": regel.kommentar,
+    }
+
+
+def _rattelseforslag_till_dict(forslag) -> dict | None:
+    if forslag is None:
+        return None
+    return {
+        "beskrivning": forslag.beskrivning,
+        "rader": [
+            {
+                "kontonr": rad.kontonr,
+                "debet": float(rad.debet),
+                "kredit": float(rad.kredit),
+                "text": rad.text,
+            }
+            for rad in forslag.rader
+        ],
+        "forbehall": forslag.forbehall,
+    }
+
+
+def _fynd_till_dict(fynd) -> dict:
+    return {
+        "kontroll_id": fynd.kontroll_id,
+        "rubrik": fynd.rubrik,
+        "allvarlighet": fynd.allvarlighet,
+        "motivering": fynd.motivering,
+        "konton": list(fynd.konton),
+        "verifikationer": list(fynd.verifikationer),
+        "belopp": float(fynd.belopp) if fynd.belopp is not None else None,
+        "vasentlig": fynd.vasentlig,
+        "regel": _regelhanvisning_till_dict(fynd.regel),
+        "forslag": _rattelseforslag_till_dict(fynd.forslag),
+    }
+
+
+def _sammanfatta_fynd(fynd: list) -> dict:
+    sammanfattning = {"avvikelse": 0, "observation": 0, "upplysning": 0}
+    for f in fynd:
+        sammanfattning[f.allvarlighet] = sammanfattning.get(f.allvarlighet, 0) + 1
+    return sammanfattning
+
+
+@mcp.tool()
+def bokslutskontroll(sokvag: str) -> dict:
+    """Kör de deterministiska bokslutskontrollerna mot en SIE4-fil och listar
+    fynd: sådant som avviker, saknas eller inte stämmer, med belopp, berörda
+    konton, en motivering på svenska och en regelhänvisning. sokvag ska vara
+    en absolut sökväg.
+
+    Ingen språkmodell avgör vad som är ett fynd — kontrollerna räknar
+    deterministiskt mot bokförd data. Föreslår aldrig en rättning som utförs
+    automatiskt; ett ev. förslag är text, inget som bokförs. Utfallet är en
+    indikation utan garanti, utgör inte revisions- eller redovisningsrådgivning
+    och kan innehålla både falska träffar och missade avvikelser. Varje post
+    ska bedömas självständigt."""
+    tomt_svar = {"fynd": None, "sammanfattning": None, "tolkningsbehov_antal": 0}
+    if not _villkor_godkanda():
+        return _sparrat_svar(tomt_svar, "fel")
+    tillaten = _tillaten_siefil(sokvag)
+    if tillaten is None:
+        _logga_lokalt("Avvisad av sökvägsvakt (eller saknad fil)", FileNotFoundError(sokvag))
+        return {
+            **tomt_svar,
+            "fel": "Kunde inte läsa filen (kontrollera att sökvägen finns och är läsbar).",
+        }
+    try:
+        sie = parse_sie4(str(tillaten))
+    except Exception as e:
+        return {**tomt_svar, "fel": _fel_vid_inlasning(sokvag, e)}
+
+    try:
+        import datetime
+
+        maskerad = maskera_siefil(sie, las_namnreferens()).maskerad_siefil
+        fynd = _kor_bokslutskontroller(maskerad, idag=datetime.date.today())
+    except Exception as e:
+        _logga_lokalt("Oväntat fel vid bokslutskontroll", e)
+        return {
+            **tomt_svar,
+            "tolkningsbehov_antal": len(sie.tolkningsbehov),
+            "fel": "Internt fel vid kontroll.",
+        }
+
+    return {
+        "fynd": [_fynd_till_dict(f) for f in fynd],
+        "sammanfattning": _sammanfatta_fynd(fynd),
         "tolkningsbehov_antal": len(sie.tolkningsbehov),
         "fel": None,
     }
@@ -735,6 +846,24 @@ async def spiris_dashboard(start_datum: str, slut_datum: str) -> dict:
     Rent aggregat utan transaktionsrader."""
     return await _kor_spiris_verktyg(
         lambda k: spiris_rag.hamta_dashboard(k, start_datum, slut_datum)
+    )
+
+
+@mcp.tool()
+async def spiris_bokslutskontroll(rakenskapsar_id: str, tom_datum: str) -> dict:
+    """Kör de deterministiska bokslutskontrollerna mot Spiris-bokföringen
+    (live data, maskerad) för ett räkenskapsår. tom_datum (yyyy-mm-dd) avgör
+    vilka saldon som hämtas.
+
+    Ingen språkmodell avgör vad som är ett fynd — kontrollerna räknar
+    deterministiskt mot bokförd data. Föreslår aldrig en rättning som utförs
+    automatiskt; ett ev. förslag är text, inget som bokförs. Utfallet är en
+    indikation utan garanti, utgör inte revisions- eller redovisningsrådgivning
+    och kan innehålla både falska träffar och missade avvikelser. Varje post
+    ska bedömas självständigt."""
+    return await _kor_spiris_verktyg(
+        lambda k: spiris_rag.hamta_bokslutskontroll(k, rakenskapsar_id, tom_datum),
+        KATEGORI_HUVUDBOK,
     )
 
 
