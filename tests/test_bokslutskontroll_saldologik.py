@@ -118,11 +118,21 @@ def test_k10_ger_noll_fynd_utan_lon():
     assert kontroll_k10(_kontext(sie)) == []
 
 
-def test_k10_ger_noll_fynd_for_okant_ar():
-    # Registret har bara ett procenttal för 2026 — default-räkenskapsåret
-    # (2025) ska ge noll fynd, inte gissa på närmaste år.
+def test_k10_sager_ifran_for_okant_ar():
+    """Registret har bara ett procenttal för 2026. Default-räkenskapsåret
+    (2025) ska varken gissa på närmaste år ELLER tiga.
+
+    Fail-closed är rätt, men tystnad är fel: noll fynd betyder i alla andra
+    kontroller "kontrollerat och inget hittat", och kontrollen skulle då se ut
+    att ha godkänt lönekostnaderna utan att ha körts."""
     sie = bygg_sie(res={"7010": "100000", "7510": "50000"})
-    assert kontroll_k10(_kontext(sie)) == []
+
+    fynd = kontroll_k10(_kontext(sie))
+
+    assert len(fynd) == 1
+    assert fynd[0].allvarlighet == "upplysning"
+    assert "2025" in fynd[0].motivering
+    assert "utfördes inte" in fynd[0].motivering
 
 
 def test_k10_foljer_registret_nar_parametern_andras(tmp_path, monkeypatch):
@@ -133,8 +143,10 @@ def test_k10_foljer_registret_nar_parametern_andras(tmp_path, monkeypatch):
         rakenskapsar=("2025-01-01", "2025-12-31"),
     )
 
-    # Med det riktiga registret (som saknar år 2025) blir det inget fynd.
-    assert kontroll_k10(_kontext(sie)) == []
+    # Med det riktiga registret (som saknar år 2025) blir det en upplysning om
+    # att kontrollen inte kunde utföras — inte ett tyst godkännande.
+    innan = kontroll_k10(_kontext(sie))
+    assert [f.allvarlighet for f in innan] == ["upplysning"]
 
     trasigt_register = tmp_path / "temporart_register.toml"
     trasigt_register.write_text(
@@ -151,3 +163,6 @@ arbetsgivaravgift_marginal = "0.05"
 
     fynd = kontroll_k10(_kontext(sie))
     assert len(fynd) == 1
+    # Nu FINNS satsen i registret, så fyndet är den riktiga kontrollen
+    # (31,42 % mot registrets 50 %), inte upplysningen om att den uteblev.
+    assert fynd[0].allvarlighet == "observation"

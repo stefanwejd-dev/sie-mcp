@@ -5,6 +5,7 @@ register som fylls genom dekoratorn `registrera`."""
 
 from __future__ import annotations
 
+import logging
 from dataclasses import replace
 from datetime import date
 from decimal import Decimal
@@ -15,6 +16,8 @@ from analysflode import berakna_standardtroskelvarden
 
 from .modell import Fynd, Kontext, Kontroll
 from .regelkalla import hamta_parameter, hamta_regel, kontroll_ider, las_register
+
+_logger = logging.getLogger(__name__)
 
 KONTROLLER: dict[str, Kontroll] = {}
 
@@ -105,13 +108,25 @@ def kor_kontroller(
     for kontroll_id, funktion in kontroller_att_köra.items():
         try:
             fynd_lista = funktion(kontext)
-        except Exception as fel:
+        except Exception:
+            # Undantagstexten stannar LOKALT. `motivering` går rakt ut till
+            # MCP-klienten (spiris_rag._fynd_till_dict), och ett undantag bär
+            # okontrollerad text — en KeyError bär sin nyckel, en ValueError vad
+            # som helst kontrollen råkade formatera in. Maskeringen (I-3) täcker
+            # SIEFil:ens fritextfält, inte vad en modul stoppar i ett undantag.
+            # Samma disciplin som mcp_server._fel_vid_inlasning: logga lokalt,
+            # returnera generiskt. Kontroll-id:t räcker för att I-6 ska fylla
+            # sin funktion — det säger VILKEN kontroll som föll.
+            _logger.exception("Kontroll %s kastade ett fel", kontroll_id)
             alla_fynd.append(
                 Fynd(
                     kontroll_id="K-00",
                     rubrik="Kontrollen kunde inte köras",
                     allvarlighet="upplysning",
-                    motivering=f"Kontroll {kontroll_id} kastade ett fel: {fel}",
+                    motivering=(
+                        f"Kontroll {kontroll_id} kunde inte köras. "
+                        f"Felet är loggat lokalt."
+                    ),
                 )
             )
             continue

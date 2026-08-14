@@ -254,12 +254,21 @@ def kontroll_k13(kontext: Kontext) -> list[Fynd]:
         verifikationer = sorted(verifikationer, key=lambda v: int(v.vernr))
         nummer = [int(v.vernr) for v in verifikationer]
 
-        luckor = [(a, b) for a, b in zip(nummer, nummer[1:]) if b != a + 1]
-        ordningsbrott = [
-            (förra, denna)
-            for förra, denna in zip(verifikationer, verifikationer[1:])
-            if denna.verdatum < förra.verdatum
+        par = list(zip(verifikationer, verifikationer[1:]))
+        luckor = [
+            (int(f.vernr), int(d.vernr)) for f, d in par if int(d.vernr) != int(f.vernr) + 1
         ]
+        ordningsbrott = [(f, d) for f, d in par if d.verdatum < f.verdatum]
+
+        # Bara ändpunkterna, inte hela serien. Fältet finns för att peka ut var
+        # man ska titta; en serie med 2 000 verifikat och en lucka gav tidigare
+        # 2 000 referenser i MCP-svaret och i tabellen — att peka på allt är
+        # samma sak som att inte peka. Ordningen bevaras (I-5): dict.fromkeys
+        # avdubblar utan att sortera om.
+        berorda: list[str] = []
+        for f, d in par:
+            if int(d.vernr) != int(f.vernr) + 1 or d.verdatum < f.verdatum:
+                berorda.extend((_verid(f), _verid(d)))
 
         if not luckor and not ordningsbrott:
             continue
@@ -279,7 +288,7 @@ def kontroll_k13(kontext: Kontext) -> list[Fynd]:
                 rubrik="Lucka eller ordningsbrott i verifikationsserie",
                 allvarlighet="avvikelse",
                 motivering=f"Serie {serie or '(utan serie)'}: " + "; ".join(delar) + ".",
-                verifikationer=tuple(_verid(v) for v in verifikationer),
+                verifikationer=tuple(dict.fromkeys(berorda)),
             )
         )
     return fynd

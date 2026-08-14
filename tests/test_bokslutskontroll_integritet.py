@@ -238,6 +238,42 @@ def test_k13_flaggar_lucka_i_verifikationsserie():
     assert fynd[0].kontroll_id == "K-13"
 
 
+def test_k13_listar_bara_luckans_andpunkter_inte_hela_serien():
+    """Granskningsfynd 3: fältet finns för att peka ut VAR man ska titta.
+
+    Tidigare bifogades hela serien, så en serie med tusentals verifikat och en
+    enda lucka gav tusentals referenser i MCP-svaret och i tabellen. Att peka på
+    allt är samma sak som att inte peka."""
+    sie = bygg_sie(
+        verifikationer=[
+            {"serie": "A", "vernr": str(n), "verdatum": "2025-01-01", "rader": []}
+            for n in (1, 2, 3, 4, 6, 7, 8, 9)
+        ]
+    )
+
+    fynd = kontroll_k13(_kontext(sie))
+
+    assert len(fynd) == 1
+    # Bara paret som omger luckan, inte de åtta verifikaten.
+    assert fynd[0].verifikationer == ("A/4", "A/6")
+
+
+def test_k13_avdubblar_nar_lucka_och_ordningsbrott_sammanfaller():
+    """Samma par kan bära både en lucka och ett datum som minskar. Det ska ge
+    en referens per verifikat, inte två, och ordningen ska bevaras (I-5)."""
+    sie = bygg_sie(
+        verifikationer=[
+            {"serie": "A", "vernr": "1", "verdatum": "2025-03-01", "rader": []},
+            {"serie": "A", "vernr": "3", "verdatum": "2025-01-01", "rader": []},
+        ]
+    )
+
+    fynd = kontroll_k13(_kontext(sie))
+
+    assert len(fynd) == 1
+    assert fynd[0].verifikationer == ("A/1", "A/3")
+
+
 def test_k13_ger_inget_fynd_for_sammanhangande_serie():
     sie = bygg_sie(
         verifikationer=[

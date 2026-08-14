@@ -158,12 +158,28 @@ def kontroll_k10(kontext: Kontext) -> list[Fynd]:
         return []
 
     procent = hamta_parameter("arbetsgivaravgift_procent", ar=år.start.year)
-    if procent is None:
-        return []
-
     marginal = hamta_parameter("arbetsgivaravgift_marginal")
-    if marginal is None:
-        return []
+    if procent is None or marginal is None:
+        # Fail-closed, men SYNLIGT. Att bara returnera [] vore att låta
+        # kontrollen se ut att ha körts och godkänt lönekostnaderna, när den i
+        # själva verket aldrig utfördes — samma sorts tysta ingenting som
+        # VARFOR.md handlar om. Registret bär bara de år någon fyllt i, och
+        # procentsatsen ändras i två lagar per år (se K-10:s kommentar), så
+        # detta INTRÄFFAR — det är inte ett teoretiskt fall.
+        saknas = "procentsats" if procent is None else "marginal"
+        return [
+            Fynd(
+                kontroll_id="K-10",
+                rubrik="Arbetsgivaravgiften kunde inte kontrolleras",
+                allvarlighet="upplysning",
+                motivering=(
+                    f"Arbetsgivaravgiftens {saknas} för år {år.start.year} saknas i "
+                    f"regelregistret. Kontrollen utfördes inte, och lönekostnaderna "
+                    f"är alltså varken godkända eller underkända av den."
+                ),
+                konton=("7000", "7510"),
+            )
+        ]
 
     kvot = avgift / lon
     if abs(kvot - procent) <= marginal:

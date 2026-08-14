@@ -328,6 +328,18 @@ kräver momskoder per transaktion, vilka SIE4 inte bär och som i Spiris ligger 
 Bygg inte en finare variant här — en finkornig kontroll på grovt underlag
 producerar falska träffar, och en kontrollmotor som ropar varg blir avstängd.
 
+**K-10 säger ifrån när den inte kan köras.** Saknas årets procentsats eller
+marginalen i registret lämnar kontrollen ett `upplysning`-fynd om att den inte
+utfördes — inte noll fynd. Skälet: i varje annan kontroll betyder noll fynd
+"kontrollerat, inget hittat", så tystnad skulle läsas som ett godkännande av
+lönekostnaderna. Och det här *inträffar* — registret bär bara de år någon fyllt
+i, och satsen ändras i två lagar per år (se K-10:s kommentar i registret).
+
+Detta är den enda platsen i katalogen där en kontroll rapporterar sin egen
+oförmåga. Övriga hoppar tyst när underlaget saknas (K-03 utan föregående års
+`#UB`, K-04 utan verifikationer) — men där är frånvaron av underlag synlig i
+själva filen, medan en saknad registerpost är osynlig för användaren.
+
 ### Grupp C — bokslutsposter
 
 | Id | Rubrik | Definition | Allvarlighet |
@@ -416,7 +428,9 @@ Filens faktiska form (läs den innan du skriver läsaren):
   till `Decimal`, aldrig till `float`** (I-7).
 * `[parametrar.arbetsgivaravgift_procent]` — nyckel är årtal som sträng
   (`"2026"`). `hamta_parameter("arbetsgivaravgift_procent", ar=2026)` slår upp
-  där; okänt år ger `None`, inte närmaste år, och K-10 ger då noll fynd.
+  där; okänt år ger `None`, aldrig närmaste år. K-10 gissar alltså aldrig — men
+  den tiger inte heller: den lämnar ett `upplysning`-fynd om att kontrollen
+  inte kunde utföras (rättat efter granskningen 2026-08-14; se §5 grupp B).
 * `[kontolistor]` — `avrakningskonton` är en lista av kontonummer;
   `anlaggningstillgangar_avskrivningsbara` och `avskrivningskonton` är
   `{fran, till}`; `debetnormala` och `kreditnormala` är listor av
