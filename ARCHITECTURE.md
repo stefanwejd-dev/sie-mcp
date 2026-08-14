@@ -1612,6 +1612,7 @@ smalare, läsorienterad delmängd (§1–§3b ovan).
 | `formatering.py` | 28 | Universell sifferformatering (decimaler, tusentalsavgränsare) | Aktiv |
 | `formatering_ui.py` | 46 | Sidomenyns formateringsval | Aktiv |
 | `utkast.py` | 292 | Lokal kö för FÖRESLAGNA skrivningar (§3c) — hashbunden, 24 h | Aktiv |
+| `bokslutskontroll/` | — | **Paket** (undantag från flat-fil-mönstret, se B-6 i hantverksboken). Deterministiskt kontrollskikt `SIEFil -> list[Fynd]` — lager 1 i `hantverksbok/BOKSLUTSPROGRAMMET.md`. Grupp A (K-01–K-06, K-13, K-15) och grupp B (K-07–K-10) klara; grupp C (K-11, K-12, K-14) och MCP-verktyget återstår. Detaljerad status i `hantverksbok/BOKSLUTSKONTROLLER.md`. | Under uppbyggnad |
 
 "Aktiv" = förändrad under de senaste utvecklingsomgångarna (Spiris-
 skrivvägen, AI-agenten, likviditetsprognosen); "Stabil" = oförändrad sedan
