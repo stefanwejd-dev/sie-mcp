@@ -63,27 +63,6 @@ class Sektion:
 
 
 
-@dataclass(frozen=True)
-class Snabbvyresultat:
-    rubrik: str
-    harkomst: Harkomstmarke = HARKOMST_LOKAL
-    nyckeltal: list[Nyckeltal] = field(default_factory=list)
-    sektioner: list[Sektion] = field(default_factory=list)
-    fotnot: str | None = None
-
-
-@dataclass(frozen=True)
-class Snabbvy:
-    """En knapp i snabbvyfältet."""
-
-    id: str
-    etikett: str
-    ikon: str
-    bygg: Callable[["Vydata"], Snabbvyresultat]
-    hjalptext: str | None = None
-    kraver: frozenset = frozenset()
-
-
 @dataclass
 class Vydata:
     """Allt en vy kan behöva. Fält som saknas är None — varje vy ansvarar för
@@ -138,7 +117,48 @@ class Vydata:
     ordrar: list[dict] | None = None
     offerter: list[dict] | None = None
     offertutkast: list[dict] | None = None
+    # Bokslutsrummet (hantverksbok/UI_ATGARDER_I_VYN.md §2.3). None = "kontrollen
+    # har inte körts"; [] = "kördes och hittade inget" — vyn måste skilja på de
+    # två (U-4).
+    fynd: list | None = None          # list[Fynd] från bokslutskontroll.motor
+    avstamningsfynd: list | None = None
 
+
+# Atgardsknapp/Atgardsforslag definieras i vy_modell.py (rena dataklasser
+# utan beroenden på snabbvyer) och importeras här — se hantverksbok/
+# UI_ATGARDER_I_VYN.md §2.0/§2.1. Importen ligger EFTER Vydata och FÖRE
+# Snabbvyresultat/Snabbvy medvetet: vy_modell importerar i sin tur
+# Nyckeltal/Sektion/Vydata härifrån, och den ömsesidiga importen är bara
+# säker om båda sidors beroenden redan är definierade när den andra modulen
+# når sin egen importrad, oavsett vilken av de två som laddas först.
+from vy_modell import Atgardsforslag, Atgardsknapp  # noqa: E402
+
+
+@dataclass(frozen=True)
+class Snabbvyresultat:
+    rubrik: str
+    harkomst: Harkomstmarke = HARKOMST_LOKAL
+    nyckeltal: list[Nyckeltal] = field(default_factory=list)
+    sektioner: list[Sektion] = field(default_factory=list)
+    fotnot: str | None = None
+    atgarder: tuple[Atgardsforslag, ...] = ()
+
+
+@dataclass(frozen=True)
+class Snabbvy:
+    """En knapp i snabbvyfältet."""
+
+    id: str
+    etikett: str
+    ikon: str
+    bygg: Callable[["Vydata"], Snabbvyresultat]
+    hjalptext: str | None = None
+    kraver: frozenset = frozenset()
+    # "kommande" = funktionen finns inte i programmet än (spärrad, låsmärkt).
+    # Skilt från kraver_data (funktionen finns, underlaget saknas) — se
+    # hantverksbok/UI_ATGARDER_I_VYN.md §4.2. Default "byggd" håller alla
+    # befintliga knapprader oförändrade.
+    status: Literal["byggd", "kommande"] = "byggd"
 
 
 def _kr(varde: Decimal | int | float, val: Formateringsval) -> str:
@@ -690,6 +710,142 @@ def bygg_underlag(data: Vydata) -> Snabbvyresultat:
             tomtext="Inga underlag hittades."
         )]
     )
+
+# --- Vy: bokslutskontroll (hantverksbok/UI_ATGARDER_I_VYN.md §4) ----------
+
+
+def _fynd_till_atgardsforslag(fynd, val: Formateringsval) -> Atgardsforslag:
+    """Fynd (bokslutskontroll.modell.Fynd) -> Atgardsforslag. Ett fynd utan
+    `forslag` (I-2: lager 1 föreslår aldrig en rättning) blir ett förslag utan
+    knapp — fullt giltigt, se §3.2."""
+    knapp = None
+    rader: tuple[tuple[str, str, str], ...] = ()
+    if fynd.forslag is not None and fynd.forslag.rader:
+        rader = tuple(
+            (rad.kontonr, _kr(rad.debet, val), _kr(rad.kredit, val))
+            for rad in fynd.forslag.rader
+        )
+        nyttolast = {
+            "beskrivning": fynd.forslag.beskrivning,
+            "transaktionsdatum": date.today().isoformat(),
+            "verifikationsserie": "A",
+            "rader": [
+                {
+                    "konto": rad.kontonr,
+                    "debet": str(rad.debet),
+                    "kredit": str(rad.kredit),
+                    "text": rad.text or "",
+                }
+                for rad in fynd.forslag.rader
+            ],
+        }
+        knapp = Atgardsknapp(
+            etikett="Godkänn och lägg i kön",
+            utkasttyp="verifikat",
+            nyttolast=nyttolast,
+            bekraftelsetext=fynd.forslag.beskrivning,
+            varning=fynd.forslag.forbehall,
+        )
+
+    return Atgardsforslag(
+        rubrik=f"{fynd.kontroll_id} — {fynd.rubrik}",
+        allvarlighet=fynd.allvarlighet,
+        motivering=fynd.motivering,
+        belopp=_kr(fynd.belopp, val) if fynd.belopp is not None else None,
+        konton=fynd.konton,
+        regel_text=f"{fynd.regel.kalla} {fynd.regel.beteckning}" if fynd.regel else None,
+        regel_lank=fynd.regel.lank_manniska if fynd.regel else None,
+        rader=rader,
+        knapp=knapp,
+    )
+
+
+def bygg_bokslutskontroll(data: Vydata) -> Snabbvyresultat:
+    # None = kontrollen har inte körts, [] = kördes och hittade inget —
+    # U-4. Vyn måste skilja på de två, inte behandla båda som "inget att visa".
+    if data.fynd is None:
+        return _saknas("Bokslutskontroll", "Kontrollen")
+
+    if not data.fynd:
+        return Snabbvyresultat(
+            rubrik="Bokslutskontroll",
+            sektioner=[
+                Sektion(
+                    rubrik="Inga fynd",
+                    niva="gron",
+                    beskrivning="Kontrollen kördes och hittade inget att flagga.",
+                )
+            ],
+        )
+
+    antal = {"avvikelse": 0, "observation": 0, "upplysning": 0}
+    for f in data.fynd:
+        antal[f.allvarlighet] = antal.get(f.allvarlighet, 0) + 1
+
+    return Snabbvyresultat(
+        rubrik="Bokslutskontroll",
+        nyckeltal=[
+            Nyckeltal("Avvikelser", str(antal["avvikelse"])),
+            Nyckeltal("Observationer", str(antal["observation"])),
+            Nyckeltal("Upplysningar", str(antal["upplysning"])),
+        ],
+        atgarder=tuple(_fynd_till_atgardsforslag(f, data.formateringsval) for f in data.fynd),
+    )
+
+
+def _kommande_platshallare(data: Vydata) -> Snabbvyresultat:
+    """Platshållare för en Snabbvy vars `status` är "kommande".
+
+    Ska ALDRIG anropas av ritlagret — knappen som pekar hit är `disabled=True`
+    (§4.3). Kastar i stället för att returnera ett tomt resultat, så att en
+    kommande-knapp som av misstag kopplas loss från sin spärr fälls direkt av
+    metatest 2 i stället för att tyst se ut som en byggd, tom vy."""
+    raise NotImplementedError(
+        "Platshållare — funktionen är inte byggd än. Om detta anropades från "
+        "ritlagret har en 'kommande'-knapp lossnat från sin spärr."
+    )
+
+
+SNABBVYER_BOKSLUT: tuple[Snabbvy, ...] = (
+    Snabbvy(
+        "granska_bokforingen", "Granska bokföringen", "🔍", bygg_bokslutskontroll,
+        "Kör hela kontrollkatalogen och listar fynden med förklaring och eventuellt förslag.",
+    ),
+    Snabbvy(
+        "kontrollera_underlag", "Kontrollera underlag", "🧾", bygg_underlag,
+        "Underlag som ännu inte är kopplade till en verifikation.",
+    ),
+    Snabbvy(
+        "stam_av_kontoutdrag", "Stäm av kontoutdrag", "🏦", _kommande_platshallare,
+        "Läser ett kontoutdrag och listar avstämningsfynden. Inte byggd än.",
+        status="kommande",
+    ),
+    Snabbvy(
+        "inkomstdeklaration", "Inkomstdeklaration", "🧮", _kommande_platshallare,
+        "Räknar fram inkomstdeklaration 2 och skriver SRU-filer du själv laddar "
+        "upp hos Skatteverket. Inte byggd än.",
+        status="kommande",
+    ),
+    Snabbvy(
+        "bokslutsposter", "Bokslutsposter", "📐", _kommande_platshallare,
+        "Avskrivningar, periodiseringar, skatt och årets resultat som utkast. "
+        "Inte byggd än.",
+        status="kommande",
+    ),
+    Snabbvy(
+        "arsredovisning", "Årsredovisning", "📄", _kommande_platshallare,
+        "Ställer upp årsredovisningen enligt K2: resultat- och balansräkning, "
+        "noter, flerårsöversikt. Inte byggd än.",
+        status="kommande",
+    ),
+    Snabbvy(
+        "stammoprotokoll", "Stämmoprotokoll", "📋", _kommande_platshallare,
+        "En mall med bolagets uppgifter och räkenskapsårets siffror, som du "
+        "själv fyller i och signerar. Inte byggd än.",
+        status="kommande",
+    ),
+)
+
 
 SNABBVYER_BOCKERNA = [
     Snabbvy("vasentlighet", "Väsentlighet", "📏", bygg_vasentlighet),

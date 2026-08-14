@@ -1,10 +1,11 @@
 # Bokslutskontroller — arkitektur och genomförande
 
-**Status:** genomförande pågår — steg 1–7 av 9 klara (modell, register, motor,
-fixturbyggare, grupp A, grupp B, grupp C, väsentlighets-/regeltest, MCP-
-verktygen). `bokslutskontroll` och `spiris_bokslutskontroll` finns nu i
-MCP-ytan och passerar de befintliga metatesterna. Steg 8 (vyn) återstår; steg
-9 (regelhänvisningarnas kvalitet) är valfritt och görs sist av allt.
+**Status:** genomförande klart — steg 1–8 av 9 utförda (modell, register,
+motor, fixturbyggare, grupp A, grupp B, grupp C, väsentlighets-/regeltest,
+MCP-verktygen, vyn). `bokslutskontroll`/`spiris_bokslutskontroll` finns i
+MCP-ytan; Bokslutsrummet (🧮, `UI_ATGARDER_I_VYN.md`) är nåbart i den
+körande appen med 🔍 Granska bokföringen byggd. Steg 9 (regelhänvisningarnas
+kvalitet) är valfritt och görs sist av allt — lager 1 är i övrigt klart.
 **Skriven:** 2026-08-14 · **Uppdaterad:** 2026-08-14
 **Arkitekt:** Claude · **Utförare:** kod-AI · **Granskare:** Claude, efteråt
 

@@ -15,8 +15,19 @@ from __future__ import annotations
 
 from typing import Any
 
+import utkast
 from chatt_renderare import _bygg_tabellhtml
+from svarskontrakt import KolumnDef, TabellBlock
 from snabbvyer import Snabbvy, Snabbvyresultat, Sektion
+from vy_modell import Atgardsforslag, Atgardsknapp
+
+# Allvarlighet (samma tre nivåer som bokslutskontroll.modell.Fynd) -> samma
+# färgnivåer som Sektion.niva. Se hantverksbok/UI_ATGARDER_I_VYN.md §3.2.
+_ALLVARLIGHET_NIVA = {
+    "avvikelse": "rod",
+    "observation": "gul",
+    "upplysning": "neutral",
+}
 
 _NIVAFARG = {
     "rod": "#d62728",
@@ -45,54 +56,57 @@ def injicera_snabbvy_css(st) -> None:
     st.markdown(SNABBVY_CSS, unsafe_allow_html=True)
 
 
+_MAX_PER_RAD = 4
+
+
 def rendera_knapprad(st, vyer: tuple[Snabbvy, ...], nyckel: str) -> str | None:
-    """Ritar knappraden (eller två rader för kunder/leverantörer) och returnerar
-    id:t för den valda vyn.
+    """Ritar knappraden (i flera rader om det behövs) och returnerar id:t för
+    den valda vyn.
 
     Valet lagras i session_state under `nyckel`, så vyn överlever en omkörning
     (varje knapptryck i Streamlit kör om hela skriptet). Ingen vy är vald från
-    början — användaren ska se fliken som vanligt tills hon klickar."""
+    början — användaren ska se fliken som vanligt tills hon klickar.
+
+    Två sorters spärr, som aldrig får se likadana ut (hantverksbok/
+    UI_ATGARDER_I_VYN.md §4.2–4.3): `status == "kommande"` (funktionen finns
+    inte än) ritas låsmärkt och `disabled=True`, oavsett `kraver`-mekanikens
+    `st.info`-beteende (som ligger i `rendera_snabbvyfalt`, oförändrat)."""
     if nyckel not in st.session_state:
         st.session_state[nyckel] = None
 
     def _rita_knapp(kolumn, vy):
+        kommande = getattr(vy, "status", "byggd") == "kommande"
         aktiv = st.session_state[nyckel] == vy.id
+        etikett = f"🔒 {vy.ikon} {vy.etikett}" if kommande else f"{vy.ikon} {vy.etikett}"
         if kolumn.button(
-            f"{vy.ikon} {vy.etikett}",
+            etikett,
             key=f"{nyckel}_{vy.id}",
             help=vy.hjalptext,
             type="primary" if aktiv else "secondary",
             width="stretch",
+            disabled=kommande,
         ):
             st.session_state[nyckel] = None if aktiv else vy.id
             st.rerun()
 
-    if len(vyer) > 4:
-        st.caption("Kundfakturor")
-        for kolumn, vy in zip(st.columns(4), vyer[:4]):
+    # Rader om högst _MAX_PER_RAD knappar. Ingen domänspecifik gruppering
+    # (t.ex. "Kundfakturor"/"Leverantörsfakturor") görs här längre — den låg
+    # tidigare hårdkodad för ALLA knapprader med fler än fyra vyer, vilket gav
+    # fel bildtexter för t.ex. registerrummets 14 knappar. Ett rum som vill ha
+    # egna gruppcaptioner ritar dem själv innan anropet.
+    rader = [vyer[i : i + _MAX_PER_RAD] for i in range(0, len(vyer), _MAX_PER_RAD)] or [()]
+    sista_kolumner = None
+    for rad in rader:
+        kolumner = st.columns(len(rad) + (1 if rad is rader[-1] else 0))
+        for kolumn, vy in zip(kolumner, rad):
             _rita_knapp(kolumn, vy)
+        if rad is rader[-1]:
+            sista_kolumner = kolumner
 
-        st.caption("Leverantörsfakturor")
-        lev_vyer = vyer[4:]
-        kols = st.columns(len(lev_vyer) + 1)
-        for kolumn, vy in zip(kols[:len(lev_vyer)], lev_vyer):
-            _rita_knapp(kolumn, vy)
-
-        if st.session_state[nyckel] is not None:
-            if kols[-1].button("✕ Stäng", key=f"{nyckel}_stang",
-                               width="stretch"):
-                st.session_state[nyckel] = None
-                st.rerun()
-    else:
-        kolumner = st.columns(len(vyer) + 1)
-        for kolumn, vy in zip(kolumner, vyer):
-            _rita_knapp(kolumn, vy)
-
-        if st.session_state[nyckel] is not None:
-            if kolumner[-1].button("✕ Stäng", key=f"{nyckel}_stang",
-                                   width="stretch"):
-                st.session_state[nyckel] = None
-                st.rerun()
+    if sista_kolumner is not None and st.session_state[nyckel] is not None:
+        if sista_kolumner[-1].button("✕ Stäng", key=f"{nyckel}_stang", width="stretch"):
+            st.session_state[nyckel] = None
+            st.rerun()
 
     return st.session_state[nyckel]
 
@@ -276,6 +290,83 @@ def _rendera_drill_fakturor(st, motpartsnamn: str, fakturor: list, drill_typ: st
 
 
 
+def _rendera_atgardsknapp(st, knapp: Atgardsknapp) -> None:
+    """Se hantverksbok/UI_ATGARDER_I_VYN.md §3.3. Knappen skapar ett utkast,
+    aldrig mer (U-3) — den anropar bara `utkast.skapa`, aldrig
+    `bekrafta_for_sandning` eller en skrivfunktion.
+
+    Nyckeln byggs av utkasttyp + en hash av nyttolasten (samma hash `utkast`
+    redan använder för sin egen ändringsdetektion) så att den överlever en
+    Streamlit-omkörning: efter ett tryck ska resultatet visas på SAMMA plats
+    i stället för att knappen dyker upp igen."""
+    nyckel = f"atgard_utkast_{knapp.utkasttyp}_{utkast.berakna_hash(knapp.nyttolast)}"
+
+    st.caption(knapp.bekraftelsetext)
+    if knapp.varning:
+        st.warning(knapp.varning)
+
+    skapat_id = st.session_state.get(nyckel)
+    if skapat_id:
+        st.success(f"Utkast skapat ({skapat_id}) — väntar på godkännande i Beslut.")
+        return
+
+    if st.button(knapp.etikett, key=f"{nyckel}_knapp"):
+        try:
+            u = utkast.skapa(knapp.utkasttyp, knapp.nyttolast, [["Åtgärd", knapp.etikett]])
+        except utkast.UtkastFel:
+            st.error("Kunde inte skapa utkastet.")
+            return
+        st.session_state[nyckel] = u.utkast_id
+        st.rerun()
+
+
+def _rendera_atgardsforslag(st, forslag: Atgardsforslag) -> None:
+    """Se hantverksbok/UI_ATGARDER_I_VYN.md §3.2. Ordningen är bindande:
+    rubrik+allvarlighet, belopp/konton, motivering, regelhänvisning,
+    konteringsrader, knapp (bara om den finns — ett förslag utan knapp är
+    fullt giltigt, hitta aldrig på en åtgärd)."""
+    niva = _ALLVARLIGHET_NIVA.get(forslag.allvarlighet, "neutral")
+    farg = _NIVAFARG.get(niva, _NIVAFARG["neutral"])
+    st.markdown(
+        f'<div class="sie-snabbvy-sektion" style="--sie-niva:{farg}">'
+        f"<h4>{forslag.rubrik}</h4></div>",
+        unsafe_allow_html=True,
+    )
+
+    detaljer = []
+    if forslag.belopp:
+        detaljer.append(f"Belopp: {forslag.belopp}")
+    if forslag.konton:
+        detaljer.append(f"Konton: {', '.join(forslag.konton)}")
+    if detaljer:
+        st.caption(" · ".join(detaljer))
+
+    st.write(forslag.motivering)
+
+    if forslag.regel_text:
+        if forslag.regel_lank:
+            st.markdown(f"[{forslag.regel_text}]({forslag.regel_lank})")
+        else:
+            st.caption(forslag.regel_text)
+
+    if forslag.rader:
+        tabell = TabellBlock(
+            kolumner=[
+                KolumnDef(nyckel="konto", rubrik="Konto", typ="text"),
+                KolumnDef(nyckel="debet", rubrik="Debet", typ="text"),
+                KolumnDef(nyckel="kredit", rubrik="Kredit", typ="text"),
+            ],
+            rader=[
+                {"konto": rad[0], "debet": rad[1], "kredit": rad[2]}
+                for rad in forslag.rader
+            ],
+        )
+        st.markdown(_bygg_tabellhtml(tabell), unsafe_allow_html=True)
+
+    if forslag.knapp is not None:
+        _rendera_atgardsknapp(st, forslag.knapp)
+
+
 def rendera_resultat(st, resultat: Snabbvyresultat, data=None) -> None:
     st.subheader(f"{resultat.rubrik} {resultat.harkomst.tecken}", help=f"{resultat.harkomst.namn}: {resultat.harkomst.forklaring}")
 
@@ -285,6 +376,12 @@ def rendera_resultat(st, resultat: Snabbvyresultat, data=None) -> None:
 
     for sektion in resultat.sektioner:
         _rendera_sektion(st, sektion, data)
+
+    # Läst defensivt (getattr): resultat kan vara ett Snabbvyresultat eller
+    # ett Vyresultat, och en äldre anropare utan fältet ska inte fälla varje
+    # befintlig snabbvy — se hantverksbok/UI_ATGARDER_I_VYN.md §3.1.
+    for forslag in getattr(resultat, "atgarder", ()):
+        _rendera_atgardsforslag(st, forslag)
 
     if resultat.fotnot:
         st.markdown(

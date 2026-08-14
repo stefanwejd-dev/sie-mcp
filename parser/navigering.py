@@ -19,6 +19,7 @@ Badgen på Åtgärder är röd så snart NÅGOT väntar på handläggning, annar
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 
 from domain_model import SIEFil
@@ -90,17 +91,46 @@ def ohanterade_maskeringsbehov(maskeringsresultat: Maskeringsresultat | None) ->
 def hitta_verifikationsavvikelser(
     sie: SIEFil | None, maskeringsresultat: Maskeringsresultat | None
 ) -> list[Verifikationsavvikelse]:
-    """SEAM (platshållare): obehandlade avvikelser i verifikationerna.
+    """Obehandlade avvikelser i bokföringen, för den röda badgen på Åtgärder.
 
-    Returnerar tills vidare ALLTID en tom lista — ingen avvikelseregel är
-    beslutad än. Signaturen tar redan emot den maskerade SIEFil:en och
-    maskeringsresultatet, så en riktig regel (obalanserade verifikat, saknad
-    vertext, kontotypavvikelser från kontotyp_vakt, ISA 450-felaktigheter …)
-    kan kopplas in här utan att vare sig badge-logiken, fliken eller app.py rörs.
+    Se hantverksbok/UI_ATGARDER_I_VYN.md §5. Kopplad till
+    bokslutskontroll.kor_kontroller (lager 1) — bara fynd med allvarlighet
+    `avvikelse` räknas in; `observation` och `upplysning` syns i Bokslut-
+    rummet men gör inte navigeringen röd (annars är badgen alltid röd och
+    slutar betyda något).
 
-    När regeln byggs: returnera avvikelser, kasta aldrig. Ett fel i sökningen
-    får inte tyst tömma åtgärdslistan och måla badgen grön."""
-    return []
+    `sie` är den RÅA SIEFil:en (samma som Bokslut-rummet kör motorn på, U-2)
+    — `maskeringsresultat` tas fortfarande emot i signaturen men används inte
+    här; badgen räknar bara, den visar ingen fritext.
+
+    "Obehandlat": i dag ger ingen av grupp A–C:s kontroller ett förslag med
+    knapp (`Fynd.forslag` är alltid `None`), så det finns ännu ingen handling
+    att markera ett fynd som åtgärdat med. Alla `avvikelse`-fynd räknas
+    därför in tills vidare — filtreringen blir en riktig fråga först när
+    lager 2 börjar producera förslag.
+
+    Kastar aldrig: ett fel i sökningen får inte tyst tömma listan och måla
+    badgen grön — det fångas här och loggas lokalt, listan blir tom."""
+    if sie is None:
+        return []
+    try:
+        from datetime import date as _date
+
+        from bokslutskontroll import kor_kontroller
+
+        fynd = kor_kontroller(sie, idag=_date.today())
+    except Exception as e:  # noqa: BLE001 — badgen får aldrig fällas av detta
+        print(f"[navigering] Kunde inte köra bokslutskontroll ({type(e).__name__}).", file=sys.stderr)
+        return []
+
+    return [
+        Verifikationsavvikelse(
+            plats=", ".join(f.verifikationer) or ", ".join(f.konton) or f.kontroll_id,
+            beskrivning=f"{f.kontroll_id}: {f.rubrik}",
+        )
+        for f in fynd
+        if f.allvarlighet == "avvikelse"
+    ]
 
 
 def bygg_atgardsstatus(

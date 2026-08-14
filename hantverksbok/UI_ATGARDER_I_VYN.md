@@ -1,7 +1,12 @@
 # Åtgärder i vyn — knapparna och förslagen på samma ställe
 
-**Status:** specifikation, kod ej påbörjad
-**Skriven:** 2026-08-14
+**Status:** genomförande klart — steg 1–6 av §8 utförda, 23 nya metatest
+(`tests/test_ui_atgardstackning.py`), hela sviten grön. Bokslutsrummet är
+nåbart i den körande appen (`app.py` → `rendera_bokslut` → 🧮 Bokslut) med
+🔍 och 🧾 byggda, fem knappar spärrade och låsmärkta. Se §9 för en nyans:
+godkännandeknappen visas bara för fynd som bär ett `Rattelseforslag`, vilket
+med rätta ingen av dagens femton kontroller gör (I-2).
+**Skriven:** 2026-08-14 · **Uppdaterad:** 2026-08-14
 **Arkitekt:** Claude · **Utförare:** kod-AI · **Granskare:** Claude, efteråt
 
 **Systerdokument:** `BOKSLUTSKONTROLLER.md` (lager 1), `BOKSLUTSPROGRAMMET.md`
@@ -45,12 +50,44 @@ Grinden ska behållas; platsen ska flyttas.
 
 ## 2. Ändringen i vy-modellen
 
-`parser/vy_modell.py` är den deklarativa primitiven: ett rum är en lista vyer,
-en vy är en ren funktion `Vydata -> Vyresultat`, och ingen Streamlit-import
-förekommer någonsin. Den skiktningen behålls.
+### 2.0 Två parallella modeller — läs detta först
 
-I dag kan `Vyresultat` bära rubrik, nyckeltal, sektioner och fotnot — allt är
-läsbart, ingenting är handlingsbart. Lägg till en tredje sorts innehåll:
+Projektet har **två** vy-modeller med nästan samma form, och bara den ena
+renderas. Det här är avgörande för var ändringarna nedan ska läggas.
+
+| | `parser/vy_modell.py` | `parser/snabbvyer.py` |
+|---|---|---|
+| Typer | `Rum`, `Vy`, `Vyresultat` | `Snabbvy`, `Snabbvyresultat` |
+| Etikett | `begrepp: Begrepp` — bunden till ordboken | `etikett: str` — fritext |
+| Renderas? | **Nej.** Inget ritlager läser `Vy` | **Ja.** `rendera_knapprad` läser `vy.etikett`, `rendera_resultat` tar `Snabbvyresultat` |
+| Används av | `parser/rum/*.py` | `SNABBVYER_*`-tuplerna, som `rum_render.py` skickar till `rendera_snabbvyfalt` |
+
+`rum_render.py` anropar alltid `snabbvy_render.rendera_snabbvyfalt(st,
+snabbvyer.SNABBVYER_X, …)` — aldrig `RUM_X.vyer`. En `Vy` som läggs i ett rum
+blir därför **aldrig ritad**. `Vy` saknar dessutom `.etikett`, som
+`rendera_knapprad` läser, så den kan inte ens skickas dit som den ser ut i dag.
+
+**Det som däremot ÄR bundet är rummen.** `tests/test_rum.py:92` jämför
+`{r.id for r in rum.RUM}` mot samtliga `url_path` i `app.py` och kräver
+likhet. Ett rum kan alltså inte registreras utan att också få en sida i appen —
+testsviten faller annars. Registret är inte dött; det är vy-nivån som är det.
+
+**Följd för denna spec:** allt som ska synas läggs på `snabbvyer`-typerna.
+`vy_modell`-typerna speglas för att den deklarativa tvillingen inte ska ruttna,
+men det är `Snabbvy` och `Snabbvyresultat` som är normativa. En ändring som bara
+görs i `vy_modell.py` är per definition osynlig.
+
+En sammanslagning av de två modellerna är rätt på sikt och **ligger utanför
+detta arbete**. Gör den inte här.
+
+### 2.1 Åtgärdstyperna
+
+I dag kan ett vyresultat bära rubrik, nyckeltal, sektioner och fotnot — allt är
+läsbart, ingenting är handlingsbart. Lägg till en tredje sorts innehåll.
+
+Typerna definieras i `parser/vy_modell.py` (de är rena dataklasser utan
+beroenden) och **importeras av `snabbvyer.py`**, så att båda modellerna talar om
+samma sak:
 
 ```python
 @dataclass(frozen=True)
@@ -80,15 +117,20 @@ class Atgardsforslag:
     knapp: Atgardsknapp | None = None               # None = inget att göra
 ```
 
-och i `Vyresultat`:
+Fältet läggs på **båda** resultattyperna, med `Snabbvyresultat` som den som
+faktiskt renderas (§2.0):
 
 ```python
+# snabbvyer.Snabbvyresultat  — NORMATIV, det är denna som ritas
+atgarder: tuple[Atgardsforslag, ...] = ()
+
+# vy_modell.Vyresultat       — spegling, så tvillingen inte ruttnar
 atgarder: tuple[Atgardsforslag, ...] = ()
 ```
 
 Default tom tuple — **alla befintliga vyer fortsätter fungera oförändrade.**
 
-### 2.1 Varför nyttolasten byggs i vy-lagret
+### 2.2 Varför nyttolasten byggs i vy-lagret
 
 Knappen bär en färdig `nyttolast`. Ritlagret ska inte behöva räkna ut något för
 att kunna skicka den vidare, och det ska inte finnas två ställen där en
@@ -98,9 +140,9 @@ bygger nyttolasten en gång, och ritlagret bara vidarebefordrar den.
 Följden är att nyttolasten går att testa utan Streamlit — vilket är hela poängen
 med skiktningen.
 
-### 2.2 Var fynden kommer ifrån
+### 2.3 Var fynden kommer ifrån
 
-`Vy.bygg` är ren och får inte läsa filer eller anropa Spiris. Kontrollmotorn
+En byggfunktion är ren och får inte läsa filer eller anropa Spiris. Kontrollmotorn
 körs därför av ritlagret och läggs i `Vydata`, precis som `vasentlighet` och
 `kontotyp_avvikelser` redan görs:
 
@@ -172,13 +214,39 @@ Knappen i vyn skapar ett utkast — den skickar det inte.
 
 ## 4. Bokslutsrummet
 
-Ett nytt rum, `parser/rum/bokslut.py`, registrerat i `parser/rum/__init__.py`.
-Det är här företagarens arbetsgång blir synlig.
-
 Rummet använder det knappradsmönster som redan finns:
 `snabbvy_render.rendera_knapprad` ritar raden, `rendera_resultat` ritar utfallet
 under den. Det är precis "klicka på en funktion, se svaret på samma ställe" —
 mönstret behöver inte uppfinnas, bara användas.
+
+### 4.0 Fem ändringar krävs för att rummet ska finnas på riktigt
+
+Det räcker inte att lägga en fil i `parser/rum/`. Följ §2.0: rummen är bundna
+till appen, vyerna renderas via `snabbvyer`. Alla fem behövs, annars blir
+rummet antingen onåbart eller så faller testsviten.
+
+1. **`parser/rum/bokslut.py`** — `RUM_BOKSLUT = Rum(id="bokslut", namn="Bokslut",
+   ikon="🧮", vyer=())`. **Tom `vyer`-tupel**, exakt som `RUM_OVERSIKT` redan
+   gör. Lägg inte `Vy`-objekt här: de skulle aldrig ritas och skulle bli en
+   andra sanning om samma knappar.
+2. **`parser/rum/__init__.py`** — importera och lägg `RUM_BOKSLUT` i `RUM`.
+3. **`parser/snabbvyer.py`** — `SNABBVYER_BOKSLUT: tuple[Snabbvy, ...]` med de
+   sju knapparna enligt §4.1. **Här bor knapparna.**
+4. **`parser/rum_render.py`** — `rendera_bokslut()`, byggd efter mönstret i
+   `rendera_bockerna`: fyll `Vydata`, anropa
+   `snabbvy_render.rendera_snabbvyfalt(st, snabbvyer.SNABBVYER_BOKSLUT,
+   "snabbvy_bokslut", vydata)`.
+5. **`app.py`** — `st.Page(rum_render.rendera_bokslut, title="Bokslut",
+   icon="🧮", url_path="bokslut")` i rätt grupp i `sidor`. Gruppen är
+   **Bokföring**, intill Böckerna.
+
+Följdändringar i `tests/test_rum.py`, som i dag hårdkodar antalet rum:
+
+* `test_rum_i_ratt_ordning` — lägg `"bokslut"` i listan, på rätt plats.
+* `test_app_py_navigering_grupper` — `total_pages` 13 → 14.
+
+Att den testen måste ändras är inte ett besvär utan beviset på att bindningen
+finns: det går inte att registrera ett rum utan att också ge det en sida.
 
 ### 4.1 Knapparna
 
@@ -213,13 +281,18 @@ användare som inte kan skilja dem åt tror att programmet är trasigt.
 källan måste ha, och `rendera_snabbvyfalt` visar redan ett `st.info` när de
 saknas. Rör inte den mekaniken — bygg vidare på den.
 
-`kommande` är nytt. Lägg till på `Vy`:
+`kommande` är nytt. Lägg till på **`Snabbvy`** — det är den typ `rendera_knapprad`
+faktiskt läser (§2.0) — och spegla på `Vy`:
 
 ```python
+# snabbvyer.Snabbvy   — NORMATIV
+status: Literal["byggd", "kommande"] = "byggd"
+
+# vy_modell.Vy        — spegling
 status: Literal["byggd", "kommande"] = "byggd"
 ```
 
-Default `"byggd"` gör att alla befintliga vyer i alla rum är oförändrade.
+Default `"byggd"` gör att alla befintliga snabbvyer i alla rum är oförändrade.
 
 ### 4.3 Hur en spärrad knapp ska ritas
 
@@ -332,6 +405,18 @@ testades. Dessa test är därför en del av leveransen, inte en efterrätt.
 7. **De två spärrlägena skiljs åt.** En vy som är `byggd` men saknar data ger
    `kraver_data`-beteendet (`st.info` om saknad förmåga), inte låsmarkeringen.
    Skyddar §4.2 — det är den förväxling som får programmet att se trasigt ut.
+8. **Hela kedjan från knapptupel till sida.** AST-test i tre led:
+   * varje `SNABBVYER_*`-tupel i `snabbvyer.py` refereras från `rum_render.py`,
+   * varje `rendera_*` som `rum_render.py` definierar och som ritar en knapprad
+     förekommer som `st.Page(...)` i `app.py`,
+   * varje `st.Page`-`url_path` motsvarar ett id i `RUM` (finns redan som
+     `test_rum.py:92` — låt den vara, hänvisa till den).
+
+   **Detta är testet som saknades.** Gapet mellan `parser/rum/`s `Vy`-objekt och
+   det som faktiskt ritas kunde uppstå just för att inget test följde kedjan hela
+   vägen ut till `app.py`. Skriv det generellt, för alla rum — inte bara för
+   bokslutsrummet. Det får gärna fälla på befintliga rum; rapportera i så fall
+   vad det hittar i stället för att undanta dem.
 
 Test 1 och 2 är de som faktiskt håller gapet stängt. Skriv dem först, och skriv
 dem så att de går sönder när någon lägger till en förmåga utan gränssnitt eller
@@ -365,6 +450,11 @@ upprätthållen av metatest 2, 6 och 7.
 **U-6. Spärr på grund av saknad funktion och spärr på grund av saknad data är
 skilda tillstånd.** De renderas olika och testas separat. §4.2.
 
+**U-7. En förmåga är inte byggd förrän den är nåbar i den körande appen.**
+Kedjan `Snabbvy` → `SNABBVYER_*` → `rendera_*` i `rum_render.py` → `st.Page` i
+`app.py` → id i `RUM` ska vara hel. En vy som bara finns i `parser/rum/` är inte
+levererad. §2.0, upprätthållen av metatest 8.
+
 ---
 
 ## 8. Genomförande
@@ -382,11 +472,13 @@ Sex steg. Testsviten grön efter varje.
    med default `"byggd"`, och `disabled`-hanteringen i `rendera_knapprad`.
    *Acceptans:* metatest 6 och 7; alla befintliga knapprader i alla rum ritas
    oförändrade (default gör att inget annat rum påverkas).
-4. **Bokslutsrummet med HELA knappraden** enligt §4.1 — 🔍 och 🧾 som `byggd`,
-   övriga fem som `kommande`.
-   *Acceptans:* rummet finns i `RUM`; alla sju knappar ritas; de fem spärrade är
-   låsmärkta, icke-klickbara och har `help`-text utan datumutfästelse; en vald
-   byggd knapp visar sitt resultat under raden; metatest 1–2 gröna.
+4. **Bokslutsrummet med HELA knappraden** enligt §4.0 och §4.1 — alla fem
+   ändringar i §4.0, med 🔍 och 🧾 som `byggd` och övriga fem som `kommande`.
+   *Acceptans:* rummet är **nåbart i den körande appen** — det finns som
+   `st.Page` i `app.py` och `test_rum.py` är uppdaterad; alla sju knappar ritas;
+   de fem spärrade är låsmärkta, icke-klickbara och har `help`-text utan
+   datumutfästelse; en vald byggd knapp visar sitt resultat under raden;
+   metatest 1–2 och 8 gröna.
 5. **Godkännandeflödet** enligt §3.3 — utkast skapas, status visas på plats,
    ingen omdirigering.
    *Acceptans:* metatest 3–4; U-3 verifierad med AST-test; ett godkännande
@@ -404,8 +496,8 @@ raden ändras inte.
 ## 9. Klart
 
 1. Steg 1–6 utförda, hela sviten grön.
-2. Metatest 1–7 finns och fäller vid rätt sorts regression.
-3. U-1 … U-6 har varsitt test namngivet efter sig.
+2. Metatest 1–8 finns och fäller vid rätt sorts regression.
+3. U-1 … U-7 har varsitt test namngivet efter sig.
 4. En användare som aldrig läst dokumentationen kan öppna appen, se
    **Bokslut**, trycka 🔍 och få fynd med förklaring och godkännandeknapp utan
    att lämna rummet — och genom att läsa raden förstå vad programmet ska kunna

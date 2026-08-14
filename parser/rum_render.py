@@ -1048,6 +1048,62 @@ def rendera_bockerna() -> None:
         for f in [VERIFIKAT, SIE4IMPORT, PERIODISERING, UTKASTANDRING, UTKASTBORTTAGNING, UTKASTBOKFORING, UNDERLAGSKOPPLING, PERIODISERINGSANDRING, PERIODISERINGSBORTTAGNING]:
             rendera_atgardsformular(st, f)
 
+
+def rendera_bokslut() -> None:
+    """Se hantverksbok/UI_ATGARDER_I_VYN.md §4. Byggd efter mönstret i
+    rendera_bockerna: fyll Vydata, låt snabby_render sköta knapprad + resultat.
+
+    U-2: motorn körs på den RÅA SIEFil:en — appen visar klartext, precis som
+    resten av rummen (DATASKYDD.md §3). MCP-vägen (mcp_server/server.py:
+    bokslutskontroll/spiris_bokslutskontroll) maskerar FÖRE motorn; det är den
+    andra hälften av samma invariant (BOKSLUTSKONTROLLER.md I-3)."""
+    st.header("🧮 Bokslut")
+
+    sie = st.session_state.get("sie")
+    if sie is None:
+        tomt_lage(st, hamta("bokforing"), "Bokföring")
+        return
+
+    snabbvy_render.injicera_snabbvy_css(st)
+
+    if "bokslut_fynd" not in st.session_state:
+        from bokslutskontroll import kor_kontroller
+        try:
+            st.session_state.bokslut_fynd = kor_kontroller(sie, idag=date.today())
+        except Exception:
+            # Kastar aldrig vidare till ritlagret — men lämnar fynd=None
+            # (U-4: "inte kört"), inte en tom lista som ser ut som rent bokslut.
+            st.session_state.bokslut_fynd = None
+
+    klient = None
+    if st.session_state.get("spiris_tokens"):
+        try:
+            cfg = app_config.las_config()
+            klient = _bygg_spiris_klient_fran_session(cfg.spiris_client_id, cfg.spiris_client_secret)
+        except Exception:
+            pass
+
+    if "bokslut_underlag" not in st.session_state:
+        st.session_state.bokslut_underlag = None
+        if klient:
+            from spiris_adapter import hamta_underlag
+            try:
+                st.session_state.bokslut_underlag = hamta_underlag(klient)
+            except Exception:
+                pass
+
+    vydata = snabbvyer.Vydata(
+        idag=date.today(),
+        formateringsval=hamta_val(),
+        fynd=st.session_state.get("bokslut_fynd"),
+        underlag=st.session_state.get("bokslut_underlag"),
+    )
+
+    snabbvy_render.rendera_snabbvyfalt(
+        st, snabbvyer.SNABBVYER_BOKSLUT, "snabbvy_bokslut", vydata
+    )
+
+
 def rendera_rapporter() -> None:
     st.header("📊 Rapporter & analys")
 

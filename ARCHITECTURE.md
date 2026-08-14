@@ -1482,9 +1482,12 @@ alla andra `spiris_*`-verktyg. Samma mekanism, rätt modul.
 
 I-3 gäller som överallt annars i lager 1: `bokslutskontroll` maskerar filen
 innan motorn körs, `spiris_bokslutskontroll` ärver maskeringen från
-`spiris_rag`. Streamlit-vyn (steg 8, ej byggd än) ska köra motorn mot den RÅA
-`SIEFil`:en — se `hantverksbok/BOKSLUTSKONTROLLER.md` §7 steg 8 och
-`hantverksbok/UI_ATGARDER_I_VYN.md`.
+`spiris_rag`. Streamlit-vyn (🧮 Bokslut, byggd i steg 8) kör motorn mot den
+RÅA `SIEFil`:en — samma invariant sedd från andra hållet, testad i båda
+riktningarna (`test_bokslutskontroll_mcp.py`, `test_ui_atgardstackning.py`).
+Se `hantverksbok/UI_ATGARDER_I_VYN.md` för rummets fem knappar utöver
+🔍 (spärrade, låsmärkta) och `test_ui_atgardstackning.py` för de metatester
+som håller bindningen mellan förmåga och gränssnitt hel.
 
 
 ## §4 Felhantering
@@ -1654,13 +1657,13 @@ smalare, läsorienterad delmängd (§1–§3b ovan).
 | `fpa_motor.py` | 1098 | Rena FP&A-motorer: P&L, balans, nyckeltal, kassaflöde, what-if, kapitalstack/WACC, likviditetsprognos (+moms) | Aktiv |
 | `fpa_vy.py` | 1641 | Glue SIEFil/Spiris-data → FP&A-rendering, all display-config | Aktiv |
 | `fpa_dashboard.py` | 1100 | Streamlit-rendering av hela Rapporter-fliken | Aktiv |
-| `navigering.py` | 184 | Flikstruktur, åtgärdsbadge (inkl. väntande utkast), sticky-CSS | Stabil |
+| `navigering.py` | 184 | Flikstruktur, åtgärdsbadge (inkl. väntande utkast, sedan 2026-08-14 bokslutskontroll-fynd med allvarlighet `avvikelse`), sticky-CSS | Aktiv |
 | `snabbvyer.py` | 576 | **Deterministiska ett-klicks-vyer** (reskontra, åldersanalys, påminnelse-/betalningsförslag). UI-fri, anropar ALDRIG en AI | Aktiv |
 | `snabbvy_render.py` | 158 | Streamlit-rendering av snabbvyfältet: knapprad, färgnivåer, sektioner | Aktiv |
 | `formatering.py` | 28 | Universell sifferformatering (decimaler, tusentalsavgränsare) | Aktiv |
 | `formatering_ui.py` | 46 | Sidomenyns formateringsval | Aktiv |
 | `utkast.py` | 292 | Lokal kö för FÖRESLAGNA skrivningar (§3c) — hashbunden, 24 h | Aktiv |
-| `bokslutskontroll/` | — | **Paket** (undantag från flat-fil-mönstret, se B-6 i hantverksboken). Deterministiskt kontrollskikt `SIEFil -> list[Fynd]` — lager 1 i `hantverksbok/BOKSLUTSPROGRAMMET.md`. Alla tre kontrollgrupper klara (K-01–K-15, K-00 reserverat): grupp A (bokföringsteknisk integritet), grupp B (saldologik), grupp C (bokslutsposter + kontotypbron). Nåbart via MCP (`bokslutskontroll`/`spiris_bokslutskontroll`, se §3 nedan). Vyn (steg 8) återstår. Detaljerad status i `hantverksbok/BOKSLUTSKONTROLLER.md`. | Under uppbyggnad |
+| `bokslutskontroll/` | — | **Paket** (undantag från flat-fil-mönstret, se B-6 i hantverksboken). Deterministiskt kontrollskikt `SIEFil -> list[Fynd]` — lager 1 i `hantverksbok/BOKSLUTSPROGRAMMET.md`. **Klart** (steg 1–8/9, steg 9 valfritt): alla tre kontrollgrupper (K-01–K-15, K-00 reserverat), nåbart via MCP (`bokslutskontroll`/`spiris_bokslutskontroll`, §3e nedan) och via appen (🧮 Bokslut-rummet, `hantverksbok/UI_ATGARDER_I_VYN.md`). Detaljerad status i `hantverksbok/BOKSLUTSKONTROLLER.md`. | Klar |
 
 "Aktiv" = förändrad under de senaste utvecklingsomgångarna (Spiris-
 skrivvägen, AI-agenten, likviditetsprognosen); "Stabil" = oförändrad sedan

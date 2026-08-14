@@ -225,6 +225,7 @@ sidor = {
     ],
     "Bokföring": [
         st.Page(rum_render.rendera_bockerna,            title="Böckerna",           icon="📚", url_path="bockerna"),
+        st.Page(rum_render.rendera_bokslut,             title="Bokslut",            icon="🧮", url_path="bokslut"),
         st.Page(rum_render.rendera_register,            title="Register",           icon="📇", url_path="register"),
     ],
     "Analys": [
