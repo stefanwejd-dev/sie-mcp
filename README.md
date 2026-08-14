@@ -29,6 +29,7 @@ Verktyget läser SIE4-bokföringsfiler och/eller ansluter mot affärssystem (t.e
 >
 > **Fullständiga villkor:** 📄 [DISCLAIMER_AND_TERMS.md](file:///DISCLAIMER_AND_TERMS.md) · 📄 [LICENSE](file:///LICENSE)
 > **Tekniskt underlag (ingen compliance-utfästelse):** [DATASKYDD.md](file:///DATASKYDD.md) · [ARCHITECTURE.md](file:///ARCHITECTURE.md) · [RISKREGISTER.md](file:///RISKREGISTER.md)
+> **Om projektets syfte och dess öppna frågor:** [VARFOR.md](file:///VARFOR.md)
 
 ---
 
