@@ -3,8 +3,14 @@
 **Status:** lager 1 klart — samtliga nio steg i `BOKSLUTSKONTROLLER.md`
 utförda. Alla sexton kontroller finns i motorn, nåbara via MCP
 (`bokslutskontroll`/`spiris_bokslutskontroll`/`hamta_regeltext`) och via
-appen (🧮 Bokslut, se `UI_ATGARDER_I_VYN.md`). Lager 1b, 2, 3 och 4 är
-fortfarande bara specificerade.
+appen (🧮 Bokslut, se `UI_ATGARDER_I_VYN.md`).
+
+**Lager 1b är förberett och redo att påbörjas:** `A-01`–`A-05` ligger i
+`regelverk/regelregister.toml` med verifierade laghänvisningar, tillsammans med
+`matchningsfonster_dagar` och kontolistan `avstamningsbara_konton`. Följden är
+att `test_varje_registrerad_kontroll_finns_i_registret_och_tvartom` **är rött
+tills 1b:s steg 4 är klart** — se §4.5, som förklarar varför det inte ska
+lagas. Lager 2, 3 och 4 är fortfarande bara specificerade.
 **Skriven:** 2026-08-14 · **Uppdaterad:** 2026-08-14
 **Arkitekt:** Claude · **Utförare:** kod-AI · **Granskare:** Claude, efteråt
 
@@ -105,13 +111,24 @@ Den enda kontrollen som ser något bokföringen inte innehåller.
 Läser ett kontoutdrag från en utomstående källa och jämför det, rad för rad, mot
 de bokförda transaktionerna på motsvarande konto. Tre sorters fynd:
 
-| Id | Rubrik | Betyder |
-|---|---|---|
-| **A-01** | Banktransaktion saknas i bokföringen | Raden finns på utdraget men inte bokförd — det här är "saker jag missat att exportera" |
-| **A-02** | Bokförd post saknas på kontoutdraget | Bokförd men aldrig genomförd, eller bokförd på fel konto |
-| **A-03** | Beloppet skiljer | Matchad på datum och motpart, men olika belopp |
-| **A-04** | Utgående saldo stämmer inte | Kontoutdragets slutsaldo ≠ kontots `#UB` |
-| **A-05** | Kontoutdraget täcker inte hela räkenskapsåret | Upplysning: avstämningen är ofullständig och får inte tolkas som ren |
+| Id | Rubrik | Betyder | Allvarlighet |
+|---|---|---|---|
+| **A-01** | Banktransaktion saknas i bokföringen | Raden finns på utdraget men inte bokförd — det här är "saker jag missat att exportera" | **avvikelse** |
+| **A-02** | Bokförd post saknas på kontoutdraget | Bokförd men aldrig genomförd, eller bokförd på fel konto | observation |
+| **A-03** | Beloppet skiljer | Matchad på datum och motpart, men olika belopp | observation |
+| **A-04** | Utgående saldo stämmer inte | Kontoutdragets slutsaldo ≠ kontots `#UB` | **avvikelse** |
+| **A-05** | Kontoutdraget täcker inte hela räkenskapsåret | Avstämningen är ofullständig och får inte tolkas som ren | upplysning |
+
+Allvarligheterna är bindande och ska inte omprövas under genomförandet. Skälet
+till att bara två är `avvikelse`: A-01 och A-04 kan beläggas mot lagtext
+(BFL 4 kap. 1 § 1 respektive 5 kap. 4 §), medan A-02 och A-03 har vanliga och
+fullt lagliga förklaringar — tidsskillnad över periodgränsen, bankavgifter,
+växlingskurs, öresavrundning. En kontroll som kallar dem avvikelser ropar varg,
+och en motor som ropar varg blir avstängd.
+
+Notera följden för åtgärdsbadgen (`UI_ATGARDER_I_VYN.md` §5): bara `avvikelse`
+tänder den. En avstämning som hittar tolv beloppsskillnader men inget annat
+lämnar alltså badgen grön — det är avsiktligt.
 
 `A-04` är den viktigaste och den billigaste. Stämmer slutsaldot är resten
 detaljer; stämmer det inte finns det med säkerhet något att hitta.
@@ -169,17 +186,39 @@ Den producerar **samma `Fynd`-typ** och registreras i **samma motor** — en
 avstämningsavvikelse och en bokslutsavvikelse är samma sak för användaren och
 ska visas på samma sätt.
 
-Steg, ett i taget, testsvit grön efter varje:
+#### Registret är redan skrivet — och sviten är röd tills du är klar
+
+`A-01` … `A-05` ligger i `regelverk/regelregister.toml` sedan 2026-08-14, med
+verifierade laghänvisningar. **Skriv inte om dem och lägg inte till egna.**
+
+En följd du ska känna till innan du börjar, så att du inte tror att du gått
+sönder något: `test_varje_registrerad_kontroll_finns_i_registret_och_tvartom`
+kräver strikt likhet mellan registrets id:n och de i `motor.KONTROLLER`. Det
+testet **är rött nu** och listar exakt de fem A-id:n som saknar kontroll.
+
+Det är inte ett fel att åtgärda genom att röra registret eller testet. Det är
+en checklista: när alla fem kontrollerna är registrerade blir den grön av sig
+själv. Läs den som din framdriftsmätare genom hela lager 1b.
+
+Undantaget från regeln "sviten grön efter varje steg" gäller alltså **bara**
+det testet, och **bara** fram till steg 4. Allt annat ska vara grönt hela vägen.
+
+#### Stegen
+
+Modulen är `parser/avstamning/`. Ett steg i taget:
 
 1. `camt053.py` — parser till en neutral `Utdragsrad` (datum, belopp, text,
    motpart, referens) plus `Utdrag` (konto, period, ingående och utgående saldo).
 2. `csvprofil.py` — kolumnprofil, sparad per konto; ingen autodetektering.
 3. `matchning.py` — de tre passen i §4.3, ren funktion, inga sidoeffekter.
+   `matchningsfonster_dagar` (= 5) hämtas ur registret, aldrig som literal.
 4. `kontroller.py` — A-01 … A-05 som vanliga kontroller i motorns register.
-5. Poster för `A-01` … `A-05` i `regelverk/regelregister.toml`.
-   **Laghänvisningarna skriver Claude, inte utföraren** — samma regel som i
-   `BOKSLUTSKONTROLLER.md`. Rapportera att posterna behövs; skriv dem inte.
-6. Sökvägsvakt, maskering och `.gitignore` enligt §4.4, med test per punkt.
+   Efter detta steg är parity-testet grönt. Kontolistan
+   `avstamningsbara_konton` ligger i registret.
+5. Sökvägsvakt, maskering och `.gitignore` enligt §4.4, med test per punkt.
+6. 🏦-knappen i bokslutsrummet: byt `status` från `kommande` till `byggd` och
+   koppla in byggfunktionen. Se `UI_ATGARDER_I_VYN.md` §8, sista stycket — det
+   är hela gränssnittsarbetet för ett nytt lager.
 
 ---
 
