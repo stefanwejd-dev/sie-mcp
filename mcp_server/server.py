@@ -2606,6 +2606,54 @@ async def skatteverket_rattslig_vagledning(sokord: str) -> dict:
     return juridik_api.skapa_lank_skatteverket(sokord)
 
 
+@mcp.tool()
+async def hamta_regeltext(kontroll_id: str) -> dict:
+    """Hämtar den faktiska lagtexten för paragrafen som ett bokslutskontroll-
+    fynds regelhänvisning redan pekar mot (kontroll_id, t.ex. "K-01").
+
+    Fyndet är fullständigt utan detta verktyg (se `bokslutskontroll`/
+    `spiris_bokslutskontroll`) — det gör bara att du slipper öppna
+    Riksdagens webbplats själv. Hittar aldrig på en lydelse: kan källan inte
+    svara returneras `lydelse: null` och `fel` säger varför."""
+    # Samma spärr och samma skäl som sok_lagstiftning: verktyget gör ett
+    # utgående uppslag (mot ett lokalt index eller mot data.riksdagen.se)
+    # med ett kontroll-id som kommer från AI-klienten.
+    if not _villkor_godkanda():
+        return _sparrat_svar({"beteckning": None, "lydelse": None}, "fel")
+
+    from bokslutskontroll.regelkalla import hamta_regel, hamta_sfs
+    from bokslutskontroll.regeltext import valj_regeltextkalla
+
+    regel = hamta_regel(kontroll_id)
+    if regel is None:
+        return {
+            "beteckning": None,
+            "lydelse": None,
+            "fel": f"Okänt kontroll-id: {kontroll_id!r}.",
+        }
+
+    sfs = hamta_sfs(kontroll_id)
+    if not sfs:
+        return {
+            "beteckning": regel.beteckning,
+            "lydelse": None,
+            "fel": "Kontrollen har ingen SFS-grundad hänvisning att slå upp lydelsen för.",
+        }
+
+    try:
+        lydelse = valj_regeltextkalla().hamta(sfs, regel.beteckning)
+    except Exception as e:
+        _logga_lokalt("Oväntat fel vid regeltextuppslag", e)
+        return {"beteckning": regel.beteckning, "lydelse": None, "fel": "Internt fel vid uppslaget."}
+
+    if lydelse is None:
+        return {
+            "beteckning": regel.beteckning,
+            "lydelse": None,
+            "fel": "Lydelsen kunde inte hämtas. Regelhänvisningen (kalla/beteckning/länk) gäller ändå.",
+        }
+    return {"beteckning": regel.beteckning, "lydelse": lydelse, "fel": None}
+
 
 @mcp.tool()
 async def spiris_bokforingslas(ctx: Context | None = None) -> dict:

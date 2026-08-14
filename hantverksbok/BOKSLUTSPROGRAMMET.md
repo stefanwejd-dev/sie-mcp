@@ -1,10 +1,10 @@
 # Bokslutsprogrammet — lagerkarta och genomförande
 
-**Status:** lager 1 klart (steg 1–8 av 9 i `BOKSLUTSKONTROLLER.md`; steg 9
-valfritt) — alla sexton kontroller finns i motorn, nåbara via MCP
-(`bokslutskontroll`/`spiris_bokslutskontroll`) och via appen (🧮 Bokslut,
-se `UI_ATGARDER_I_VYN.md`). Lager 1b, 2, 3 och 4 är fortfarande bara
-specificerade.
+**Status:** lager 1 klart — samtliga nio steg i `BOKSLUTSKONTROLLER.md`
+utförda. Alla sexton kontroller finns i motorn, nåbara via MCP
+(`bokslutskontroll`/`spiris_bokslutskontroll`/`hamta_regeltext`) och via
+appen (🧮 Bokslut, se `UI_ATGARDER_I_VYN.md`). Lager 1b, 2, 3 och 4 är
+fortfarande bara specificerade.
 **Skriven:** 2026-08-14 · **Uppdaterad:** 2026-08-14
 **Arkitekt:** Claude · **Utförare:** kod-AI · **Granskare:** Claude, efteråt
 

@@ -32,6 +32,7 @@ from mcp_server.server import (
     granska_kontotyper,
     bokslutskontroll,
     spiris_bokslutskontroll,
+    hamta_regeltext,
     spiris_artiklar,
     spiris_balansrapport,
     spiris_bankkonton,
@@ -268,6 +269,17 @@ def test_utkastverktyg_sparras_utan_godkannande():
     assert server_modul.kontrollera_utkast()["info"] == compliance.SPARRTEXT_KORT
 
 
+def test_hamta_regeltext_sparras_utan_godkannande():
+    """Steg 9a: hamta_regeltext gör ett utgående uppslag (lokalt index eller
+    Riksdagens öppna data). Samma spärr och samma skäl som juridikverktygen
+    — men svarsformen har `fel`, inte `info` (samma som bokslutskontroll-
+    verktygen), så ett eget litet test i stället för att pressas in i
+    juridik-loopen nedan."""
+    svar = asyncio.run(hamta_regeltext("K-01"))
+    assert svar["fel"] == compliance.SPARRTEXT_KORT
+    assert svar["lydelse"] is None
+
+
 def test_juridikverktygen_sparras_utan_godkannande():
     """Juridikverktygen läser ingen bokföring, men `sok_lagstiftning` gör ett
     UTGÅENDE anrop till data.riksdagen.se med en sökterm som kommer från
@@ -335,7 +347,7 @@ def test_alla_registrerade_verktyg_har_ett_sparrtest():
            "forbered_betalningsregistrering", "forbered_makulering"}
         | {"forbered_saljdokumentutskick", "forbered_efakturautskick",
            "forbered_saljdokumentatgard"}
-        | {"sok_lagstiftning", "skatteverket_rattslig_vagledning"}
+        | {"sok_lagstiftning", "skatteverket_rattslig_vagledning", "hamta_regeltext"}
         | {"forbered_leverantorsfakturautkast", "forbered_attest",
            "forbered_leverantorsbetalning"}
         | {"forbered_masterdataandring", "forbered_masterdataborttagning"}

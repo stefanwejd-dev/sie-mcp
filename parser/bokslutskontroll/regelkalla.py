@@ -135,3 +135,15 @@ def hamta_parameter(namn: str, ar: int | None = None) -> Any:
 def kontroll_ider() -> set[str]:
     register = las_register()
     return set(register["kontroll"].keys())
+
+
+def hamta_sfs(kontroll_id: str) -> str | None:
+    """Det råa SFS-numret ("1999:1078") för en kontroll, om posten har ett.
+    `Regelhanvisning.kalla` bär bara den formaterade strängen ("SFS
+    1999:1078") — steg 9a (regeltext.py) behöver talet rått för att slå upp
+    paragrafen. Okänt kontroll-id eller en post utan sfs (K-00) ger None."""
+    register = las_register()
+    post = register["kontroll"].get(kontroll_id)
+    if post is None:
+        return None
+    return post.get("sfs")

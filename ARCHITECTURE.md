@@ -1441,13 +1441,14 @@ strängjämförelsen överlever omladdningen.
 
 ## §3e Bokslutskontroller (tillägg 2026-08-14) — lager 1, se hantverksboken
 
-Två verktyg ovanpå det deterministiska kontrollskiktet i `bokslutskontroll/`
+Tre verktyg ovanpå det deterministiska kontrollskiktet i `bokslutskontroll/`
 (§2 ovan; full spec i `hantverksbok/BOKSLUTSKONTROLLER.md`):
 
 | Verktyg | Indata | Väg |
 |---|---|---|
 | `bokslutskontroll` | `sokvag: str` | fil, samma mönster som §3 |
 | `spiris_bokslutskontroll` | `rakenskapsar_id: str, tom_datum: str` | Spiris live, samma mönster som §3b |
+| `hamta_regeltext` | `kontroll_id: str` | paragraftext på begäran (steg 9a), samma villkorsspärr och samma skäl som `sok_lagstiftning`/`skatteverket_rattslig_vagledning` (utgående uppslag) |
 
 Svarsformen är gemensam:
 
@@ -1488,6 +1489,20 @@ riktningarna (`test_bokslutskontroll_mcp.py`, `test_ui_atgardstackning.py`).
 Se `hantverksbok/UI_ATGARDER_I_VYN.md` för rummets fem knappar utöver
 🔍 (spärrade, låsmärkta) och `test_ui_atgardstackning.py` för de metatester
 som håller bindningen mellan förmåga och gränssnitt hel.
+
+**Steg 9a — paragraftext på begäran.** `bokslutskontroll/regeltext.py`
+definierar `Regeltextkalla` (protokoll) med två implementationer:
+`QuietChattRegeltextkalla` (mjuk, `try/except`-skyddad import av
+`quiet_oppen_data.adaptrar.lagtext` — sie-mcp har **inget** hårt beroende
+på quiet_chatt, se §8.2 i hantverksboken) och `RiksdagenRegeltextkalla`
+(alltid tillgänglig, samma anrop som `sok_lagstiftning`). Nåbarhet avgörs
+på infrastrukturnivå, inte per fråga, så en källa som verkligen svarat
+"hittar inget" aldrig tystas av en sämre källas gissning. Fail-closed hela
+vägen: okänt `kontroll_id`, en kontroll utan SFS-grund (K-00) eller en
+källa som inte svarar ger alla `lydelse: null` + ett strukturerat `fel` —
+aldrig en påhittad paragraftext. Fyndet självt (`regel`-fältet ovan) är
+fullständigt utan detta verktyg; det gör bara att Riksdagens webbplats
+slipper öppnas för hand.
 
 
 ## §4 Felhantering
@@ -1663,7 +1678,7 @@ smalare, läsorienterad delmängd (§1–§3b ovan).
 | `formatering.py` | 28 | Universell sifferformatering (decimaler, tusentalsavgränsare) | Aktiv |
 | `formatering_ui.py` | 46 | Sidomenyns formateringsval | Aktiv |
 | `utkast.py` | 292 | Lokal kö för FÖRESLAGNA skrivningar (§3c) — hashbunden, 24 h | Aktiv |
-| `bokslutskontroll/` | — | **Paket** (undantag från flat-fil-mönstret, se B-6 i hantverksboken). Deterministiskt kontrollskikt `SIEFil -> list[Fynd]` — lager 1 i `hantverksbok/BOKSLUTSPROGRAMMET.md`. **Klart** (steg 1–8/9, steg 9 valfritt): alla tre kontrollgrupper (K-01–K-15, K-00 reserverat), nåbart via MCP (`bokslutskontroll`/`spiris_bokslutskontroll`, §3e nedan) och via appen (🧮 Bokslut-rummet, `hantverksbok/UI_ATGARDER_I_VYN.md`). Detaljerad status i `hantverksbok/BOKSLUTSKONTROLLER.md`. | Klar |
+| `bokslutskontroll/` | — | **Paket** (undantag från flat-fil-mönstret, se B-6 i hantverksboken). Deterministiskt kontrollskikt `SIEFil -> list[Fynd]` — lager 1 i `hantverksbok/BOKSLUTSPROGRAMMET.md`. **Klart, alla nio steg**: alla tre kontrollgrupper (K-01–K-15, K-00 reserverat), nåbart via MCP (`bokslutskontroll`/`spiris_bokslutskontroll`/`hamta_regeltext`, §3e nedan) och via appen (🧮 Bokslut-rummet, `hantverksbok/UI_ATGARDER_I_VYN.md`). Steg 9b (Skatteverkets tal maskinellt in i registret) medvetet ogjort tills lager 2 påbörjas. Detaljerad status i `hantverksbok/BOKSLUTSKONTROLLER.md`. | Klar |
 
 "Aktiv" = förändrad under de senaste utvecklingsomgångarna (Spiris-
 skrivvägen, AI-agenten, likviditetsprognosen); "Stabil" = oförändrad sedan
