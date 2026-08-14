@@ -7,9 +7,18 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
-from typing import Callable, Literal
+from typing import TYPE_CHECKING, Callable, Literal
 
 from domain_model import SIEFil
+
+if TYPE_CHECKING:
+    # Bara för typannotering (från __future__ import annotations gör alla
+    # annotationer till strängar — ingen körtidsimport sker). bokslutskontroll
+    # importerar ALDRIG avstamning på riktigt: det vore ett cirkulärt
+    # paketberoende, eftersom avstamning/kontroller.py importerar
+    # bokslutskontroll (registrera, Fynd, Kontext). Beroendet går bara åt
+    # ena hållet — se hantverksbok/BOKSLUTSPROGRAMMET.md §4.5 steg 4.
+    from avstamning.camt053 import Utdrag
 
 Allvarlighet = Literal["avvikelse", "observation", "upplysning"]
 
@@ -69,6 +78,15 @@ class Kontext:
     utfallsvasentlighet: Decimal | None = None
     parametrar: dict[str, object] = field(default_factory=dict)  # ur registret
     tolerans: Decimal = Decimal("1.00")  # kronor; ur registret
+    # Lager 1b (avstämning, se BOKSLUTSPROGRAMMET.md §4). Båda None som
+    # standard — lager 1:s K-*-kontroller och alla befintliga anrop är helt
+    # opåverkade. A-*-kontrollerna kör bara när båda är satta: det finns
+    # ingen väg att stämma av ett konto utan att användaren tillhandahåller
+    # utdraget OCH pekar ut vilket bokfört konto det gäller (utdragets egen
+    # kontoidentifierare, t.ex. ett IBAN, är inte samma sträng som ett
+    # BAS-kontonummer — mappningen görs av anroparen, inte gissas här).
+    utdrag: "Utdrag | None" = None
+    avstamningskonto: str | None = None
 
 
 Kontroll = Callable[[Kontext], list[Fynd]]

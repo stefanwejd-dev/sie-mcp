@@ -97,6 +97,12 @@ settings.json
 *.pptx
 *.csv
 
+# Kontoutdrag (lager 1b, se BOKSLUTSPROGRAMMET.md §4.4) — camt.053 är XML.
+# *.csv ovan täcker redan den andra kontoutdragsvägen. Ingen legitim XML-fil
+# finns i förrådet i dag, så samma "blankt förbud kostar ingenting"-princip
+# gäller som för PDF/xls/doc ovan.
+*.xml
+
 # Skärmdumpar och inspelningar från riktiga konton.
 *_spiris.png
 recordings/

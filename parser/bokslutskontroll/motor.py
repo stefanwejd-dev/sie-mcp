@@ -36,7 +36,14 @@ def registrera(kontroll_id: str):
     return dekorator
 
 
-def _bygg_kontext(sie: SIEFil, *, idag: date, arsnr: int) -> Kontext:
+def _bygg_kontext(
+    sie: SIEFil,
+    *,
+    idag: date,
+    arsnr: int,
+    utdrag=None,
+    avstamningskonto: str | None = None,
+) -> Kontext:
     register = las_register()
     parametrar = dict(register["parametrar"])
     parametrar["kontolistor"] = register["kontolistor"]
@@ -65,6 +72,8 @@ def _bygg_kontext(sie: SIEFil, *, idag: date, arsnr: int) -> Kontext:
         utfallsvasentlighet=utfallsvasentlighet,
         parametrar=parametrar,
         tolerans=tolerans,
+        utdrag=utdrag,
+        avstamningskonto=avstamningskonto,
     )
 
 
@@ -85,6 +94,8 @@ def kor_kontroller(
     idag: date,
     arsnr: int = 0,
     endast: set[str] | None = None,
+    utdrag=None,
+    avstamningskonto: str | None = None,
 ) -> list[Fynd]:
     # I-4: varje registrerad kontroll måste finnas i regelregistret. Fail-closed.
     kända_ider = kontroll_ider()
@@ -94,7 +105,9 @@ def kor_kontroller(
                 f"Kontroll {kontroll_id} är registrerad men saknas i regelregistret."
             )
 
-    kontext = _bygg_kontext(sie, idag=idag, arsnr=arsnr)
+    kontext = _bygg_kontext(
+        sie, idag=idag, arsnr=arsnr, utdrag=utdrag, avstamningskonto=avstamningskonto
+    )
 
     kontroller_att_köra = KONTROLLER
     if endast is not None:

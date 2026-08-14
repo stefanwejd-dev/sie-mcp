@@ -212,6 +212,27 @@ def _tillaten_siefil(sokvag: str) -> Path | None:
     return p if any(p.is_relative_to(r) for r in rötter) else None
 
 
+KONTOUTDRAG_KATALOG_ENV = "SIE_MCP_KONTOUTDRAG_KATALOG"  # os.pathsep-separerad lista
+
+
+def _tillaten_kontoutdrag(sokvag: str) -> Path | None:
+    """Sökvägsvakt för kontoutdragsfiler — samma mönster och samma
+    fail-closed-princip som `_tillaten_siefil`, men med en EGEN
+    miljövariabel (BOKSLUTSPROGRAMMET.md §4.4): ett kontoutdrag är det mest
+    personuppgiftstäta materialet i systemet (varje rad kan bära en
+    motparts namn), och förtjänar sin egen tillåtelselista i stället för
+    att ärva SIE-filernas."""
+    rot_lista = os.environ.get(KONTOUTDRAG_KATALOG_ENV, "")
+    rötter = [Path(r).expanduser().resolve() for r in rot_lista.split(os.pathsep) if r]
+    if not rötter:
+        return None
+    try:
+        p = Path(sokvag).expanduser().resolve(strict=True)
+    except OSError:
+        return None
+    return p if any(p.is_relative_to(r) for r in rötter) else None
+
+
 def _fel_vid_inlasning(sokvag: str, e: Exception) -> str:
     if isinstance(e, (FileNotFoundError, OSError)):
         _logga_lokalt("Kunde inte läsa filen", e)

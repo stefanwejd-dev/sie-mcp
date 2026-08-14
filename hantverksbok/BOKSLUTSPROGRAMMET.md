@@ -5,12 +5,12 @@ utförda. Alla sexton kontroller finns i motorn, nåbara via MCP
 (`bokslutskontroll`/`spiris_bokslutskontroll`/`hamta_regeltext`) och via
 appen (🧮 Bokslut, se `UI_ATGARDER_I_VYN.md`).
 
-**Lager 1b är förberett och redo att påbörjas:** `A-01`–`A-05` ligger i
-`regelverk/regelregister.toml` med verifierade laghänvisningar, tillsammans med
-`matchningsfonster_dagar` och kontolistan `avstamningsbara_konton`. Följden är
-att `test_varje_registrerad_kontroll_finns_i_registret_och_tvartom` **är rött
-tills 1b:s steg 4 är klart** — se §4.5, som förklarar varför det inte ska
-lagas. Lager 2, 3 och 4 är fortfarande bara specificerade.
+**Lager 1b: steg 1–5 av 6 i §4.5 klara** — `parser/avstamning/` (`camt053.py`,
+`csvprofil.py`, `matchning.py` i fyra pass inkl. §4.3.1:s parkoppling,
+`kontroller.py` med A-01–A-05, `sekretess.py`). `test_varje_registrerad_
+kontroll_finns_i_registret_och_tvartom` är grönt igen sedan steg 4. Kvar:
+steg 6 — 🏦-knappen i bokslutsrummet. Lager 2, 3 och 4 är fortfarande bara
+specificerade.
 **Skriven:** 2026-08-14 · **Uppdaterad:** 2026-08-14
 **Arkitekt:** Claude · **Utförare:** kod-AI · **Granskare:** Claude, efteråt
 
