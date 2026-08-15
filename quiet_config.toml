@@ -1,0 +1,31 @@
+# Konfiguration för quiet_oppen_data när den körs INUTI sie-mcp (se
+# parser/quiet_kalla.py). Spegling av quiet_chatt/config.toml — samma
+# motor, samma källor, men körd lokalt i sie-mcps egen process i stället för
+# mot den publikt driftsatta api.quiet.nu. Se README.md "Juridik & skatt"
+# för hur data/index.sqlite byggs.
+#
+# [site] och [kvot] läses av quiet_oppen_data.konfig men används bara av dess
+# FastAPI-lager (api.py, aldrig importerat här) — värdena är kvar för att
+# TOML-schemat kräver dem, de gör ingenting i sie-mcp.
+
+[site]
+domain = "quiet.nu"
+betrodd_proxy = true
+
+[modell]
+namn              = "claude-opus-5"
+effort_hamtning   = "high"
+effort_syntes     = "medium"
+max_verktygsvarv  = 8
+max_tokens_hamtning = 16000
+max_tokens_syntes = 8000
+
+[kvot]
+fragor_per_ip_per_dygn  = 50
+fragor_totalt_per_dygn  = 2000
+kostnadstak_sek_per_manad = 1000
+
+[index]
+db = "data/quiet_index.sqlite"
+embedding_modell = "KBLab/sentence-bert-swedish-cased"
+embedding_dim = 768

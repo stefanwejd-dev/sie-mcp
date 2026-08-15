@@ -68,6 +68,7 @@ from mcp_server.server import (
     spiris_underlag,
     spiris_hamta_underlag, spiris_offertutkast, spiris_bokforingslas,
     spiris_kvittningskandidater,
+    fraga_myndighetskallor,
 )
 
 FILVERKTYG = [berakna_vasentlighet, granska_kontotyper, bokslutskontroll]
@@ -280,32 +281,30 @@ def test_hamta_regeltext_sparras_utan_godkannande():
     assert svar["lydelse"] is None
 
 
-def test_juridikverktygen_sparras_utan_godkannande():
-    """Juridikverktygen läser ingen bokföring, men `sok_lagstiftning` gör ett
-    UTGÅENDE anrop till data.riksdagen.se med en sökterm som kommer från
-    AI-klienten och kan bära affärskontext.
+def test_fraga_myndighetskallor_sparras_utan_godkannande():
+    """fraga_myndighetskallor (parser/quiet_kalla.py) gör UTGÅENDE anrop till
+    ett tiotal myndighets-API:er och till Anthropic, med en fråga som kommer
+    från AI-klienten och kan bära affärskontext.
 
     Spärrens syfte är att inget utflöde sker innan en människa godkänt
-    villkoren — och ett utflöde är ett utflöde oavsett mottagare. Verktygen
-    registrerades utan spärr; testet finns för att det inte ska kunna hända
-    tyst igen."""
-    for anrop in (
-        lambda: server_modul.sok_lagstiftning("avdrag julbord"),
-        lambda: server_modul.skatteverket_rattslig_vagledning("traktamente"),
-    ):
-        svar = asyncio.run(anrop())
-        assert svar["info"] == compliance.SPARRTEXT_KORT
+    villkoren — och ett utflöde är ett utflöde oavsett mottagare."""
+    svar = asyncio.run(fraga_myndighetskallor("avdrag julbord"))
+    assert svar["forbehall"] == compliance.SPARRTEXT_KORT
+    assert svar["kan_besvaras"] is False
+    assert svar["kallor"] == []
 
 
 def test_ingen_utgaende_trafik_fran_juridikverktyget_utan_godkannande(monkeypatch):
-    """Spärren måste ligga FÖRE nätverksanropet, inte efter."""
-    import juridik_api
+    """Spärren måste ligga FÖRE nätverksanropet (och Anthropic-anropet), inte
+    efter. quiet_kalla importeras lazy inuti verktyget — patchar modulen
+    direkt, inte importnamnet i mcp_server.server, av samma skäl."""
+    import quiet_kalla
 
     def _far_inte_anropas(*a, **k):
         raise AssertionError("nätverksanrop gjordes trots spärrat läge")
 
-    monkeypatch.setattr(juridik_api, "sok_svensk_lagstiftning", _far_inte_anropas)
-    asyncio.run(server_modul.sok_lagstiftning("avdrag julbord"))
+    monkeypatch.setattr(quiet_kalla, "fraga_myndighetskallor", _far_inte_anropas)
+    asyncio.run(server_modul.fraga_myndighetskallor("avdrag julbord"))
 
 
 def test_inget_utkast_skrivs_till_disk_utan_godkannande(monkeypatch):
@@ -347,7 +346,7 @@ def test_alla_registrerade_verktyg_har_ett_sparrtest():
            "forbered_betalningsregistrering", "forbered_makulering"}
         | {"forbered_saljdokumentutskick", "forbered_efakturautskick",
            "forbered_saljdokumentatgard"}
-        | {"sok_lagstiftning", "skatteverket_rattslig_vagledning", "hamta_regeltext"}
+        | {"fraga_myndighetskallor", "hamta_regeltext"}
         | {"forbered_leverantorsfakturautkast", "forbered_attest",
            "forbered_leverantorsbetalning"}
         | {"forbered_masterdataandring", "forbered_masterdataborttagning"}

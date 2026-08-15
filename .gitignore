@@ -18,6 +18,10 @@ ENV/
 
 # Environment variables
 .env
+
+# quiet_oppen_data-index (parser/quiet_kalla.py) — genererad av
+# `python -m quiet_oppen_data.index.ingest` / `.index.lag_ingest`, se README.
+data/
 .env.*
 !.env.example
 

@@ -91,7 +91,6 @@ import revisionslogg
 import saker_lagring
 import sessionslogg
 import spiris_rag
-import juridik_api
 import utkast
 from bokslutskontroll import kor_kontroller as _kor_bokslutskontroller
 from kontotyp_vakt import analysera_kontotyper
@@ -2582,49 +2581,67 @@ async def verifikatutkast() -> dict:
     return await spiris_verifikatutkast()
 
 
-# --- JURIDIK-VERKTYG (PoC) ---
+# --- JURIDIK & MYNDIGHETSDATA ---
+#
+# Ersätter de tidigare två handskrivna PoC-verktygen (sok_lagstiftning,
+# skatteverket_rattslig_vagledning — se git-historiken om de behöver
+# återställas). Ett enda verktyg mot quiet_oppen_data (parser/quiet_kalla.py)
+# ger nu tillgång till HELA källbunden-chatt-motorn: 62 författningar plus
+# femton myndighetskällor (Riksbanken, SCB, Skatteverket, Kronofogden,
+# Kolada, TED, VIES, SMHI, Skolverket, Trafikanalys, Polisens händelser,
+# JobTech, Sveriges dataportal — inte bara SFS och en söklänk till
+# Skatteverket). Samma "facit"-implementation som körs bakom api.quiet.nu.
 
 @mcp.tool()
-async def sok_lagstiftning(sokord: str) -> dict:
+async def fraga_myndighetskallor(fraga: str) -> dict:
     """
-    AUTONOM TRIGGER: Använd detta verktyg PROAKTIVT när användarens fråga 
-    berör laglighet, avdragsrätt, skattekonsekvenser, eller krav på bokföring.
-    Exempel: "Får jag dra av julbordet?", "När måste jag bokföra kvittot?", 
-    "Får jag göra utdelning?". 
-    
-    Används INTE om användaren enbart frågar efter företagets egna 
-    siffror/saldon (t.ex. "Hur mycket kassa har jag?").
-    
-    Returnerar lagrubriker och exakta URL:er till lagen. Kombinera ofta
-    detta med spiris_kontosaldo för att först läsa beloppet, och sedan
-    slå upp lagen för att ge ett juridiskt förankrat svar.
+    AUTONOM TRIGGER: Använd detta verktyg PROAKTIVT när användarens fråga rör
+    laglighet, avdragsrätt, skattekonsekvenser, krav på bokföring, eller
+    fakta som en svensk myndighet publicerar (t.ex. Riksbankens referensränta,
+    SCB-statistik, Skatteverkets skattetabeller). Exempel: "Får jag dra av
+    julbordet?", "Vad är styrräntan just nu?", "Får jag göra utdelning?".
+
+    Används INTE om användaren enbart frågar efter företagets egna
+    siffror/saldon (t.ex. "Hur mycket kassa har jag?") — kombinera då
+    hellre med spiris_kontosaldo.
+
+    Frågan besvaras av en modell som ENDAST får skriva sådant den faktiskt
+    hittat hos en myndighetskälla — aldrig ur eget minne. Svaret kommer med
+    fotnoter till en källista (myndighet, period, klickbar länk). Hittar
+    motorn inget relevant sätts kan_besvaras=false i stället för att gissa.
     """
-    # Villkorsspärren gäller ÄVEN här. Verktyget läser ingen bokföring, men det
-    # gör ett UTGÅENDE anrop till data.riksdagen.se med en sökterm som kommer
+    # Villkorsspärren gäller ÄVEN här. Verktyget gör UTGÅENDE anrop till ett
+    # tiotal myndighets-API:er och till Anthropic, med en fråga som kommer
     # från AI-klienten och kan bära affärskontext. Spärrens syfte är att inget
-    # utflöde sker innan en människa godkänt villkoren — och ett utflöde är ett
-    # utflöde oavsett vem mottagaren är.
+    # utflöde sker innan en människa godkänt villkoren.
     if not _villkor_godkanda():
-        return _sparrat_svar({"traffar": [], "resultat": []}, "info")
-    return juridik_api.sok_svensk_lagstiftning(sokord)
+        return _sparrat_svar(
+            {"kan_besvaras": False, "svar": "", "kallor": []}, "forbehall"
+        )
 
-@mcp.tool()
-async def skatteverket_rattslig_vagledning(sokord: str) -> dict:
-    """
-    AUTONOM TRIGGER: Använd detta verktyg PROAKTIVT när användaren frågar om
-    Skatteverkets tolkningar, beloppsgränser (traktamente, milersättning, 
-    julmåltid), eller specifika skatteregler. 
-    
-    Genererar en sök-länk till Skatteverkets Rättsliga Vägledning.
-    Använd detta för att alltid ge kunden en officiell källa till ditt svar.
-    """
-    # Samma spärr som sok_lagstiftning. Det här verktyget bygger bara en URL
-    # lokalt och gör inget nätverksanrop, men undantag i en spärr ska motiveras
-    # av något starkare än "just det här är ofarligt" — annars urholkas regeln
-    # ett verktyg i taget.
-    if not _villkor_godkanda():
-        return _sparrat_svar({"lank": "", "sokord": sokord}, "info")
-    return juridik_api.skapa_lank_skatteverket(sokord)
+    from quiet_kalla import fraga_myndighetskallor as _fraga
+
+    svar = _fraga(fraga)
+    if svar.fel:
+        return {"kan_besvaras": False, "svar": "", "kallor": [], "fel": svar.fel}
+
+    return {
+        "kan_besvaras": svar.kan_besvaras,
+        "svar": svar.text,
+        "kallor": [
+            {
+                "nr": k.nr,
+                "etikett": k.etikett,
+                "myndighet": k.myndighet,
+                "period": k.period,
+                "lank": k.lank_manniska,
+                "licens": k.licens,
+            }
+            for k in svar.kallor
+        ],
+        "forbehall": svar.forbehall,
+        "attribution": svar.attribution,
+    }
 
 
 @mcp.tool()

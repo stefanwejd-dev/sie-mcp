@@ -6,6 +6,16 @@ mcp[cli]>=1.28,<2.0
 # API-anrop mot Haiku. Se ARCHITECTURE_tillagg_modul5.md (Gap 3b).
 anthropic
 
+# quiet_oppen_data — den källbundna myndighetschatten (Juridik & skatt-rummet
+# i app.py, samma verktyg i mcp_server/server.py), se parser/quiet_kalla.py.
+# Facit-implementationen bor i ett eget repo (quiet_chatt) och installeras
+# härifrån som ett vanligt paket, inte kopieras in. Privat repo — kräver att
+# git redan har åtkomst (samma inloggning som `git clone` skulle behöva).
+# Drar med sig fastapi/uvicorn transitivt trots att sie-mcp inte kör dess
+# webbserver — paketet skiljer inte ut "motor" och "API" som separata
+# installations-extras. Accepterad avvägning, inte ett misstag.
+quiet-oppen-data @ git+https://github.com/stefanwejd-dev/quiet_chatt.git
+
 # Lokal UI-app, se app.py.
 streamlit
 
@@ -21,3 +31,15 @@ httpx
 # Fernet-kryptering av maskeringsliggaren (mask_dict.enc), se parser/app_config.py.
 python-dotenv
 cryptography
+
+# Lager 0, extraktionens textlagerväg (parser/lager0/extraktion.py). Läser
+# PDF:ens befintliga textlager LOKALT — ingen OCR, ingen bildtolkning, inget
+# utflöde. Se hantverksbok/LAGER0_KONTERINGSFLODET.md §8.2: det är just för
+# att slippa skicka dokumentet någonstans som textlagret är förstahandsvalet.
+pypdf
+
+# Genererar fixtur-PDF:er i testsviten (tests/_lager0_fixturer.py). Verkliga
+# fakturor får inte ligga i repot — .gitignore förbjuder blankt PDF — så
+# testunderlaget skapas vid körning i stället för att committas.
+# Utvecklingsberoende: används inte av någon körväg i produkten.
+reportlab

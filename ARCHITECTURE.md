@@ -1084,7 +1084,7 @@ implementerad och verifierad, men VÄXT VÄSENTLIGT sedan v1 nedan skrevs.
 | Fil-baserade (Modul 1/2) | 2 | `berakna_vasentlighet`, `granska_kontotyper` |
 | Spiris, läsande (§3b) | 38 | struktur, huvudbok, rapporter, reskontra, motpartsregister |
 | Förslag (§3c) | 4 | `forbered_kund/kundfaktura/verifikat`, `kontrollera_utkast` |
-| Juridik (PoC) | 2 | `sok_lagstiftning`, `skatteverket_rattslig_vagledning` |
+| Juridik & myndighetsdata | 1 | `fraga_myndighetskallor` — quiet_oppen_data i processen (se `parser/quiet_kalla.py`), ersatte de två PoC-verktygen |
 | Villkor | 1 | `visa_anvandarvillkor` — alltid anropbart |
 
 **Noll skrivande verktyg.** `forbered_*` skriver ingenting — se §3c.
@@ -1448,7 +1448,7 @@ Tre verktyg ovanpå det deterministiska kontrollskiktet i `bokslutskontroll/`
 |---|---|---|
 | `bokslutskontroll` | `sokvag: str` | fil, samma mönster som §3 |
 | `spiris_bokslutskontroll` | `rakenskapsar_id: str, tom_datum: str` | Spiris live, samma mönster som §3b |
-| `hamta_regeltext` | `kontroll_id: str` | paragraftext på begäran (steg 9a), samma villkorsspärr och samma skäl som `sok_lagstiftning`/`skatteverket_rattslig_vagledning` (utgående uppslag) |
+| `hamta_regeltext` | `kontroll_id: str` | paragraftext på begäran (steg 9a), samma villkorsspärr och samma skäl som `fraga_myndighetskallor` (utgående uppslag) |
 
 Svarsformen är gemensam:
 
@@ -1495,7 +1495,8 @@ definierar `Regeltextkalla` (protokoll) med två implementationer:
 `QuietChattRegeltextkalla` (mjuk, `try/except`-skyddad import av
 `quiet_oppen_data.adaptrar.lagtext` — sie-mcp har **inget** hårt beroende
 på quiet_chatt, se §8.2 i hantverksboken) och `RiksdagenRegeltextkalla`
-(alltid tillgänglig, samma anrop som `sok_lagstiftning`). Nåbarhet avgörs
+(alltid tillgänglig, samma anrop som `fraga_myndighetskallor` gör mot
+Riksdagens öppna data). Nåbarhet avgörs
 på infrastrukturnivå, inte per fråga, så en källa som verkligen svarat
 "hittar inget" aldrig tystas av en sämre källas gissning. Fail-closed hela
 vägen: okänt `kontroll_id`, en kontroll utan SFS-grund (K-00) eller en
@@ -2155,8 +2156,8 @@ Användargränssnittet (`app.py` och `parser/rum_render.py`) har utökats från 
 - **Analys:** Rapporter, Investeringskalkyl, Juridik & Skatt
 - **Data:** Data in/ut
 
-### Juridik & Skatt (Hårdstyrd Agent)
-Ett av de nya rummen, **Juridik & Skatt**, isolerar en specialiserad AI-agent (`parser/juridik_chatt.py`) med en hårdstyrd systemprompt. Denna agent får endast tillgång till juridiska uppslag (t.ex. `sok_lagstiftning` och `skatteverket_rattslig_vagledning`) och kan inte läsa företagets bokföringsdata. Detta etablerar en stark systemgräns: användaren vet att agenten här inne endast tillämpar gällande rätt, och svaren standardiseras till (1) kort svar på 2-8 meningar, (2) lagcitat, och (3) källhänvisning.
+### Juridik & myndighetsdata (källbunden agent)
+Ett av de nya rummen, **Juridik & myndighetsdata**, isolerar en specialiserad AI-agent (`parser/quiet_kalla.py`, brygga till det fristående paketet `quiet_oppen_data` — "facit"-implementationen, se `quiet_chatt`-repot) och kan inte läsa företagets bokföringsdata. Agenten får bara skriva sådant den faktiskt hittat hos en källa — SFS-lagtext och förarbeten (Riksdagens öppna data), Skatteverkets skattetabeller och en söklänk till dess rättsliga vägledning, samt tretton ytterligare myndighetskällor (Riksbanken, SCB, Kronofogden, Kolada, TED, VIES, SMHI, Skolverket, Trafikanalys, Polisens händelser, JobTech, Sveriges dataportal) — aldrig ur eget minne. Detta etablerar en stark systemgräns: användaren vet att agenten här inne endast återger vad en myndighet faktiskt publicerat, med fotnot och källänk per påstående. Ersatte f.d. `parser/juridik_chatt.py` (två handskrivna verktyg, se git-historiken).
 
 ### SIE4-export (Data in/ut)
 Verktyget erbjuder nu fullständig export till SIE4 direkt från UI:t i rummet **Data in/ut**. Eftersom exporter enbart innebär läsning av data skickas dessa inte till utkastkön (som hanterar skrivningar), utan genereras och laddas ned direkt via ett dedikerat nedladdningsflöde.
