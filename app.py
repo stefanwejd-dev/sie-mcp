@@ -45,6 +45,13 @@ compliance.krav_godkannande(st)
 
 app_tillstand.initiera(st)
 
+if (os.environ.get("SIE_MCP_DEMO") == "1" or "--demo" in sys.argv) and st.session_state.get("sie") is None:
+    try:
+        from verktyg.demo_data import ladda_demodata
+        ladda_demodata(st)
+    except Exception:
+        pass
+
 config = app_config.las_config()
 
 data_page = st.Page(rum_render.rendera_data, title="Data in/ut", icon="🔄", url_path="data")
