@@ -3,13 +3,27 @@
   <img src="assets/branding/logo-color.svg" alt="Quiet Numbers" height="40">
 </picture>
 
-# sie-mcp — verktyg för SIE4-filer och Spiris/Visma
+# sie-mcp — bokföringsanalys och MCP-verktyg för SIE4 och Spiris/Visma
 
 **Utgiven av Quiet Numbers.**
 
-**sie-mcp** är ett svenskt hobbyprojekt i Python för att läsa och sammanställa bokföring, med två gränssnitt mot en delad kärna: en **Streamlit-app (`app.py`)** och en **MCP-server (`mcp_server/server.py`)**.
+**sie-mcp** är ett lokalt svenskt verktyg i Python för att läsa, analysera och ställa frågor mot bokföringsdata (från SIE4-filer och affärssystemet Spiris/Visma eAccounting) med stöd för både lokala modeller (Ollama) och molnbaserade AI-modeller.
 
-Verktyget läser SIE4-bokföringsfiler och/eller ansluter mot affärssystem (t.ex. Spiris/Visma eAccounting) med användarens egna uppgifter, kan ersätta vissa identifierande uppgifter med tokens innan text skickas till en AI-modell (lokal Ollama eller molnbaserad), och producerar sammanställningar som är avsedda att efterlikna revisionsanalys (ISA 320/450), FP&A-rapportering och AI-assisterad konteringshjälp.
+Verktyget har två separata gränssnitt mot samma delade kärna:
+* **Streamlit-appen (`app.py`):** Grafiskt skrivbordsgränssnitt med revisionsanalys (ISA 320/450), FP&A-rapportering, konteringshjälp och ett källbundet juridik-rum.
+* **MCP-servern (`mcp_server/server.py`):** Modelloberoende verktygsserver över `stdio` för Claude Desktop och andra AI-agenter med 88 verktyg och strikt utkastgranskning.
+
+Juridik- och skatteuppslagen i appens juridik-rum drivs av den källbundna motorn från systerprojektet [quiet_chatt](https://github.com/stefanwejd-dev/quiet_chatt).
+
+---
+
+### Fem arkitekturprinciper
+
+1. **Lokal först:** All bokföringsdata, beräkningar och sessioner bearbetas och lagras lokalt på din egen dator.
+2. **BYOK / BYOA (Bring Your Own Key / App):** Inga externa servrar förmedlar dina data. Du använder dina egna API-nycklar och affärssystemskonton.
+3. **Spärrad tills du godkänt (Fail-closed):** Programvaran och dess MCP-verktyg är helt spärrade tills du granskat och godkänt villkoren på din dator.
+4. **Maskering före extern modell:** Känsliga person- och bolagsuppgifter pseudonymiseras lokalt med tokens (`[PERSON_1]`, `[BOLAG_1]`) innan text skickas till en extern AI-modell.
+5. **Utkastkrav — inga direkta skrivningar:** En AI-agent kan aldrig bokföra eller skapa fakturor direkt. Den lägger förslag i en utkastkö med kryptografisk integritetskontroll (SHA-256) som kräver att en människa granskar och godkänner.
 
 ---
 
@@ -74,7 +88,6 @@ Klienten (Claude Desktop e.dyl.) listar automatiskt alla verktyg när servern an
 * **Förslag (Utkastvägen):** `forbered_*`-verktyg för att skapa fakturor, bokföra, kvitta betalningar, ändra kontoplan, periodisera och hantera bokföringslås. Dessa utför ingenting, utan lägger utkast för mänsklig granskning.
 * **Villkor:** `visa_anvandarvillkor` för att läsa avtalet.
 
-
 **Inga skrivande verktyg exponeras över MCP.** `forbered_*`-verktygen skriver ingenting — de lägger ett *förslag* i en lokal kö. Förslaget utförs först när du själv har granskat de verkliga uppgifterna i appens flik **Åtgärder** och tryckt "Godkänn och skicka". MCP-servern kan alltså föreslå men aldrig utföra, och dess källkod refererar inte ens skrivfunktionerna.
 
 Förslaget binds till en SHA-256-hash: ändras nyttolasten mellan förslag och godkännande vägras sändningen. Utkast gallras efter 24 timmar, eftersom underlaget i affärssystemet kan ha hunnit ändras.
@@ -105,7 +118,7 @@ Börja med `spiris_rakenskapsar` — räkenskapsårets id krävs som indata till
 
 Beskrivningarna nedan säger vad koden är **avsedd** att göra. De är inte utfästelser om att den gör det korrekt eller fullständigt.
 
-1. **Maskeringsfunktionen (Modul 3):** söker efter namn, organisationsnummer, personnummer och vissa adressuppgifter och ersätter dem med tokens (`[PERSON_1]`, `[BOLAG_1]`) innan text kan sändas externt. Okända namn i fritext är tänkta att stoppas för lokal granskning. Funktionen är ofullständig och har kända begränsningar — se [DISCLAIMER_AND_TERMS.md](file:///DISCLAIMER_AND_TERMS.md) avsnitt 6. Resultatet är pseudonymiserat, aldrig anonymiserat: uppgifterna förblir personuppgifter.
+1. **Maskeringsfunktionen (Modul 3):** söker efter namn, organisationsnummer, personnummer och vissa adressuppgifter och ersätter dem med tokens (`[PERSON_1]`, `[BOLAG_1]`) innan text kan sändas externt. Okända namn i fritext är tänkta att stoppas för lokal granskning. Funktionen är ofullständig och har kända begränsningar — se [DISCLAIMER_AND_TERMS.md](DISCLAIMER_AND_TERMS.md) avsnitt 6. Resultatet är pseudonymiserat, aldrig anonymiserat: uppgifterna förblir personuppgifter.
 2. **Lokal lagring (`saker_lagring.py`):** nycklar, OAuth-tokens, krypterade liggare och loggar placeras i en katalog per användare under `%LOCALAPPDATA%\sie-mcp` i stället för i projektmappen. Åtkomstskyddet är operativsystemets; du ansvarar själv för filernas säkerhet.
 3. **Utflödesloggning (`sessionslogg.py` och `revisionslogg.py`):** en läsbar, **okrypterad** markdownfil per session med den nyttolast som sänts, plus en metadatalogg. Filerna kan innehålla personuppgifter och är ditt ansvar att skydda och gallra.
 4. **Fail-closed som designprincip:** koden är skriven för att neka hellre än att gissa, och för att inte returnera råa felmeddelanden. Det är en ambition i konstruktionen, inte en garanti om utfallet.
