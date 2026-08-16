@@ -1048,6 +1048,62 @@ def rendera_bockerna() -> None:
         for f in [VERIFIKAT, SIE4IMPORT, PERIODISERING, UTKASTANDRING, UTKASTBORTTAGNING, UTKASTBOKFORING, UNDERLAGSKOPPLING, PERIODISERINGSANDRING, PERIODISERINGSBORTTAGNING]:
             rendera_atgardsformular(st, f)
 
+
+def rendera_bokslut() -> None:
+    """Se hantverksbok/UI_ATGARDER_I_VYN.md §4. Byggd efter mönstret i
+    rendera_bockerna: fyll Vydata, låt snabby_render sköta knapprad + resultat.
+
+    U-2: motorn körs på den RÅA SIEFil:en — appen visar klartext, precis som
+    resten av rummen (DATASKYDD.md §3). MCP-vägen (mcp_server/server.py:
+    bokslutskontroll/spiris_bokslutskontroll) maskerar FÖRE motorn; det är den
+    andra hälften av samma invariant (BOKSLUTSKONTROLLER.md I-3)."""
+    st.header("🧮 Bokslut")
+
+    sie = st.session_state.get("sie")
+    if sie is None:
+        tomt_lage(st, hamta("bokforing"), "Bokföring")
+        return
+
+    snabbvy_render.injicera_snabbvy_css(st)
+
+    if "bokslut_fynd" not in st.session_state:
+        from bokslutskontroll import kor_kontroller
+        try:
+            st.session_state.bokslut_fynd = kor_kontroller(sie, idag=date.today())
+        except Exception:
+            # Kastar aldrig vidare till ritlagret — men lämnar fynd=None
+            # (U-4: "inte kört"), inte en tom lista som ser ut som rent bokslut.
+            st.session_state.bokslut_fynd = None
+
+    klient = None
+    if st.session_state.get("spiris_tokens"):
+        try:
+            cfg = app_config.las_config()
+            klient = _bygg_spiris_klient_fran_session(cfg.spiris_client_id, cfg.spiris_client_secret)
+        except Exception:
+            pass
+
+    if "bokslut_underlag" not in st.session_state:
+        st.session_state.bokslut_underlag = None
+        if klient:
+            from spiris_adapter import hamta_underlag
+            try:
+                st.session_state.bokslut_underlag = hamta_underlag(klient)
+            except Exception:
+                pass
+
+    vydata = snabbvyer.Vydata(
+        idag=date.today(),
+        formateringsval=hamta_val(),
+        fynd=st.session_state.get("bokslut_fynd"),
+        underlag=st.session_state.get("bokslut_underlag"),
+    )
+
+    snabbvy_render.rendera_snabbvyfalt(
+        st, snabbvyer.SNABBVYER_BOKSLUT, "snabbvy_bokslut", vydata
+    )
+
+
 def rendera_rapporter() -> None:
     st.header("📊 Rapporter & analys")
 
@@ -1082,16 +1138,24 @@ def rendera_investeringskalkyl() -> None:
     )
 
 def rendera_juridik() -> None:
-    st.header("⚖️ Juridik & Skatt")
-    st.markdown("Här pratar du med en AI som är låst till att söka i Svensk Författningssamling (SFS) och Skatteverkets vägledning. Inga gissningar, bara lag.")
-    
+    st.header("⚖️ Juridik & myndighetsdata")
+    st.markdown(
+        "Här pratar du med en AI som bara får skriva sådant den faktiskt hittat "
+        "hos en svensk myndighet — aldrig ur eget minne. Källorna spänner "
+        "bredare än bara lagtext: Riksbanken, SCB, Skatteverket, Kronofogden, "
+        "Kolada, TED, VIES, SMHI, Skolverket, Trafikanalys, Polisens händelser, "
+        "JobTech och Sveriges dataportal, utöver 62 författningar i "
+        "Svensk Författningssamling. Hittar den inget relevant säger den det, "
+        "i stället för att gissa."
+    )
+
     col1, col2, col3 = st.columns(3)
     if col1.button("Regler för leasing"):
         st.session_state.juridik_prompt = "Vilka regler gäller för bokföring av finansiell leasing (K2/K3)?"
     if col2.button("Moms på julbord"):
         st.session_state.juridik_prompt = "Hur mycket moms får jag dra av för representation och julbord?"
-    if col3.button("Utdelningsutrymme"):
-        st.session_state.juridik_prompt = "Vad säger Aktiebolagslagen om försiktighetsregeln vid utdelning?"
+    if col3.button("Riksbankens referensränta"):
+        st.session_state.juridik_prompt = "Vad är Riksbankens referensränta just nu?"
 
     if "juridik_samtal" not in st.session_state:
         st.session_state.juridik_samtal = []
@@ -1099,9 +1163,16 @@ def rendera_juridik() -> None:
     for msg in st.session_state.juridik_samtal:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
-            
-    ny_fraga = st.chat_input("Din fråga till skattejuristen...")
-    
+            if msg["role"] == "assistant" and msg.get("kallor"):
+                with st.expander(f"{len(msg['kallor'])} källor"):
+                    for k in msg["kallor"]:
+                        rad = f"**[{k['nr']}] {k['etikett']}** — {k['myndighet']}"
+                        if k.get("period"):
+                            rad += f" ({k['period']})"
+                        st.markdown(f"{rad}  \n[{k['lank']}]({k['lank']})")
+
+    ny_fraga = st.chat_input("Din fråga om lag, skatt eller myndighetsdata...")
+
     if "juridik_prompt" in st.session_state and st.session_state.juridik_prompt:
         ny_fraga = st.session_state.juridik_prompt
         st.session_state.juridik_prompt = None
@@ -1110,21 +1181,43 @@ def rendera_juridik() -> None:
         with st.chat_message("user"):
             st.markdown(ny_fraga)
         st.session_state.juridik_samtal.append({"role": "user", "content": ny_fraga})
-        
+
         with st.chat_message("assistant"):
-            with st.spinner("Slår upp i lagboken..."):
+            with st.spinner("Slår upp hos myndigheterna..."):
                 konf = st.session_state.get("ai_konfiguration")
                 if not konf or konf.leverantör != "Anthropic" or not konf.api_nyckel:
                     st.error("Detta rum kräver att Anthropic (Claude) är vald och att API-nyckel är inlagd i inställningarna.")
                 else:
-                    from juridik_chatt import kora_juridik_chatt
-                    svar = kora_juridik_chatt(
-                        st.session_state.juridik_samtal, 
-                        konf.api_nyckel, 
-                        konf.vald_modell or "claude-3-5-sonnet-20240620"
-                    )
-                    st.markdown(svar)
-                    st.session_state.juridik_samtal.append({"role": "assistant", "content": svar})
+                    from quiet_kalla import fraga_myndighetskallor
+                    svar = fraga_myndighetskallor(ny_fraga, api_nyckel=konf.api_nyckel)
+
+                    if svar.fel:
+                        text = f"Ett tekniskt fel inträffade: {svar.fel}"
+                        st.error(text)
+                        st.session_state.juridik_samtal.append({"role": "assistant", "content": text})
+                    elif not svar.kan_besvaras:
+                        text = svar.forbehall or "Det hittade jag inte hos någon av källorna."
+                        st.markdown(text)
+                        st.session_state.juridik_samtal.append({"role": "assistant", "content": text})
+                    else:
+                        st.markdown(svar.text)
+                        kallor = [
+                            {"nr": k.nr, "etikett": k.etikett, "myndighet": k.myndighet,
+                             "period": k.period, "lank": k.lank_manniska}
+                            for k in svar.kallor
+                        ]
+                        if kallor:
+                            with st.expander(f"{len(kallor)} källor"):
+                                for k in kallor:
+                                    rad = f"**[{k['nr']}] {k['etikett']}** — {k['myndighet']}"
+                                    if k["period"]:
+                                        rad += f" ({k['period']})"
+                                    st.markdown(f"{rad}  \n[{k['lank']}]({k['lank']})")
+                        if svar.forbehall:
+                            st.caption(f"Not: {svar.forbehall}")
+                        st.session_state.juridik_samtal.append({
+                            "role": "assistant", "content": svar.text, "kallor": kallor,
+                        })
 
 def rendera_foretags_chatt() -> None:
     st.header("💬 Företagsdata")

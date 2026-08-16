@@ -79,6 +79,7 @@ from mcp_server.server import (
     spiris_hamta_underlag, spiris_offertutkast, spiris_bokforingslas,
     spiris_kvittningskandidater,
     spiris_prislistor, spiris_rabattavtal, spiris_etiketter, spiris_verifikation, spiris_bankhandelse,
+    spiris_bokslutskontroll,
 )
 
 _COMPANY = {"Name": "Testbolag AB", "CorporateIdentityNumber": "556677-8899",
@@ -312,6 +313,7 @@ ALLA_SPIRISVERKTYG = {
     "spiris_etiketter": lambda: spiris_etiketter("kund"),
     "spiris_verifikation": lambda: spiris_verifikation("fy-1", "v-1"),
     "spiris_bankhandelse": lambda: spiris_bankhandelse("b-1", "t-1"),
+    "spiris_bokslutskontroll": lambda: spiris_bokslutskontroll("fy-2026", "2026-12-31"),
 }
 
 

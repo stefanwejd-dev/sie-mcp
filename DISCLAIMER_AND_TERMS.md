@@ -107,7 +107,7 @@ Att bedöma om användningen är laglig, och att säkerställa att den är det, 
 5. **Säkerhet, incidenter och information.** Att uppfylla kraven på säkerhetsåtgärder (Art. 32), rutin för personuppgiftsincidenter (Art. 33/34) och informationsskyldighet gentemot registrerade (Art. 13/14).
 6. **Yrkesreglering.** Att följa tillämplig yrkesreglering, tystnadsplikt och de villkor som gäller för användarens egna leverantörskonton.
 
-[DATASKYDD.md](file:///DATASKYDD.md) i projektet är ett **tekniskt underlag** som beskriver hur programvaran fungerar. Det är inte en compliance-utfästelse, inte juridisk rådgivning och inte ett bevis på att något krav är uppfyllt. Användaren ansvarar för att själv granska, verifiera och komplettera underlaget.
+[docs/DATASKYDD.md](docs/DATASKYDD.md) i projektet är ett **tekniskt underlag** som beskriver hur programvaran fungerar. Det är inte en compliance-utfästelse, inte juridisk rådgivning och inte ett bevis på att något krav är uppfyllt. Användaren ansvarar för att själv granska, verifiera och komplettera underlaget.
 
 ---
 
@@ -226,4 +226,4 @@ Den exakta lydelsen av dessa punkter finns i `parser/compliance.py` och visas i 
 - **Ogiltighet och fortsatt giltighet.** Skulle någon bestämmelse i dessa villkor helt eller delvis inte kunna göras gällande, ska övriga bestämmelser fortsätta att gälla oförändrade, och den berörda bestämmelsen tillämpas i den största utsträckning som är möjlig så att dess syfte uppnås så långt det går. Att en bestämmelse inte kan göras gällande i ett visst fall, mot en viss part eller i en viss jurisdiktion påverkar inte dess giltighet i övrigt.
 - **Ingen eftergift.** Att upphovsmännen i något fall avstår från att åberopa en bestämmelse innebär inte att rätten att åberopa den, eller någon annan bestämmelse, går förlorad.
 - **Ingen support.** Programvaran tillhandahålls utan support, underhåll eller åtagande att rätta fel.
-- **Övrig dokumentation.** [LICENSE](file:///LICENSE) · [README.md](file:///README.md) · [DATASKYDD.md](file:///DATASKYDD.md) (tekniskt underlag) · [ARCHITECTURE.md](file:///ARCHITECTURE.md) · [RISKREGISTER.md](file:///RISKREGISTER.md). Dessa dokument är tekniska beskrivningar och ändrar inte ansvarsfördelningen i detta dokument. Vid motstridighet gäller detta dokument och [LICENSE](file:///LICENSE).
+- **Övrig dokumentation.** [LICENSE](LICENSE) · [README.md](README.md) · [docs/DATASKYDD.md](docs/DATASKYDD.md) (tekniskt underlag). Dessa dokument är tekniska beskrivningar och ändrar inte ansvarsfördelningen i detta dokument. Vid motstridighet gäller detta dokument och [LICENSE](LICENSE).

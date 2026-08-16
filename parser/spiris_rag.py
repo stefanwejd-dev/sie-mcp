@@ -75,6 +75,14 @@ from spiris_adapter import hamta_kontosaldo as _adapter_kontosaldo
 from spiris_adapter import hamta_referensdata as _adapter_referensdata
 from spiris_adapter import hamta_bankhandelser as _adapter_bankhandelser
 from spiris_adapter import hamta_avstamningslage as _adapter_avstamningslage
+from spiris_adapter import hamta_siefil_fran_spiris as _adapter_siefil_fran_spiris
+
+# bokslutskontroll är lager 1 (se hantverksbok/BOKSLUTSKONTROLLER.md) — ett
+# rent SIEFil -> list[Fynd]-kontrollskikt utan egen kännedom om Spiris. Denna
+# modul är den enda platsen där Spiris-hämtning och den motorn möts, av samma
+# skäl som allt annat i filen: adaptergränsen korsas bara här, aldrig direkt
+# från mcp_server/server.py (se test_mcp_servern_gar_aldrig_forbi_spiris_rag).
+from bokslutskontroll import kor_kontroller as _kor_bokslutskontroller
 
 # Omgranskningens fynd 1: MCP-vägen körde utan referenslistan (Lager 3a) —
 # appen skickade sin namnreferens men de här verktygen anropade maskera_siefil/
@@ -472,6 +480,80 @@ async def hamta_dashboard(
             "balans": balans,
             "nyckeltal": nyckeltal,
             "kassaflode": kassaflode,
+        }
+    )
+
+
+# --- Bokslutskontroller (lager 1, se hantverksbok/BOKSLUTSKONTROLLER.md) ---
+# I-3: MCP-vägen ska alltid se maskerad data. hamta_siefil_fran_spiris bygger
+# en RÅ SIEFil (adapterlager); maskeringen sker här, EN gång, innan motorn
+# (bokslutskontroll.kor_kontroller) någonsin ser den. Motorn i sig vet
+# ingenting om Spiris — ren SIEFil -> list[Fynd].
+
+
+def _regelhanvisning_till_dict(regel) -> dict | None:
+    if regel is None:
+        return None
+    return {
+        "kalla": regel.kalla,
+        "beteckning": regel.beteckning,
+        "lank_manniska": regel.lank_manniska,
+        "lank_maskin": regel.lank_maskin,
+        "kommentar": regel.kommentar,
+    }
+
+
+def _rattelseforslag_till_dict(forslag) -> dict | None:
+    if forslag is None:
+        return None
+    return {
+        "beskrivning": forslag.beskrivning,
+        "rader": [
+            {"kontonr": rad.kontonr, "debet": rad.debet, "kredit": rad.kredit, "text": rad.text}
+            for rad in forslag.rader
+        ],
+        "forbehall": forslag.forbehall,
+    }
+
+
+def _fynd_till_dict(fynd) -> dict:
+    # Belopp lämnas som Decimal — _kor_spiris_verktyg kör json_sakert() på hela
+    # svaret innan det når klienten, precis som för alla andra spiris_*-verktyg.
+    return {
+        "kontroll_id": fynd.kontroll_id,
+        "rubrik": fynd.rubrik,
+        "allvarlighet": fynd.allvarlighet,
+        "motivering": fynd.motivering,
+        "konton": list(fynd.konton),
+        "verifikationer": list(fynd.verifikationer),
+        "belopp": fynd.belopp,
+        "vasentlig": fynd.vasentlig,
+        "regel": _regelhanvisning_till_dict(fynd.regel),
+        "forslag": _rattelseforslag_till_dict(fynd.forslag),
+    }
+
+
+def _sammanfatta_fynd(fynd: list) -> dict[str, int]:
+    sammanfattning = {"avvikelse": 0, "observation": 0, "upplysning": 0}
+    for f in fynd:
+        sammanfattning[f.allvarlighet] = sammanfattning.get(f.allvarlighet, 0) + 1
+    return sammanfattning
+
+
+async def hamta_bokslutskontroll(
+    klient: _Spirisklient, räkenskapsår_id: str, tom_datum: str
+) -> dict[str, Any]:
+    """Kör bokslutskontroll-motorn (lager 1) mot Spiris-bokföringen för ett
+    räkenskapsår. Fail-closed på samma sätt som allt annat i modulen: fel
+    fångas av mcp_server._kor_spiris_verktyg, inte här."""
+    sie = await asyncio.to_thread(_adapter_siefil_fran_spiris, klient, räkenskapsår_id, tom_datum)
+    maskerad = maskera_siefil(sie, las_namnreferens()).maskerad_siefil
+    fynd = _kor_bokslutskontroller(maskerad, idag=_date.today())
+    return _med_sakerhetsnot(
+        {
+            "fynd": [_fynd_till_dict(f) for f in fynd],
+            "sammanfattning": _sammanfatta_fynd(fynd),
+            "tolkningsbehov_antal": len(sie.tolkningsbehov),
         }
     )
 

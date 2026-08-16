@@ -1,0 +1,363 @@
+# Regelregister för bokslutskontrollerna
+# ==========================================
+#
+# Enda sanningen om vilken regel varje kontroll vilar på, och om de tal som
+# kontrollerna jämför mot. Se hantverksbok/BOKSLUTSKONTROLLER.md §5 och B-4.
+#
+# INGET tal och INGEN paragraf får flyttas härifrån in i Python-kod. Skälet är
+# att båda ändras utan att koden gör det: skattesatser byts vid årsskiftet,
+# paragrafer omnumreras vid lagändring. Ligger de i en funktionskropp hittar
+# ingen dem när det händer.
+#
+# Länkarna härleds ur `sfs` av parser/bokslutskontroll/regelkalla.py:
+#   lank_manniska = https://www.riksdagen.se/sv/dokument-och-lagar/dokument/_sfs-<sfs med bindestreck>/
+#   lank_maskin   = https://data.riksdagen.se/dokument/sfs-<sfs med bindestreck>
+# En post utan `sfs` MÅSTE ange `lank_manniska` explicit.
+#
+# `verifierad` = det datum då paragrafens lydelse lästes i Riksdagens öppna
+# data. Samma disciplin som quiet_chatts källregister: en ohämtad hänvisning
+# är en gissning, och gissningar hör inte hemma i ett underlag som en
+# människa ska fatta bokslutsbeslut på.
+
+version = "1.0"
+uppdaterad = "2026-08-14"
+
+
+# ---------------------------------------------------------------------------
+# Parametrar
+# ---------------------------------------------------------------------------
+
+[parametrar]
+# Beloppstolerans i kronor vid jämförelse av beräknade saldon. Öresavrundning
+# i affärssystem gör exakt likhet olämplig som villkor.
+tolerans_kronor = "1.00"
+
+# K-11: hur många dagar före räkenskapsårets slut en kostnad räknas som
+# "nära årsskiftet". Inte en lagregel — ett urvalsfönster, valt så att en
+# månadsfaktura hinner med.
+periodiseringsfonster_dagar = 30
+
+# K-07: tillåten marginal utöver normalskattesatsen innan kvoten
+# utgående moms / nettoomsättning flaggas. Blandade skattesatser och
+# omsättning utanför momsplikten gör kvoten trubbig; marginalen finns för
+# att slippa flagga varje bolag som säljer både 25 % och 6 %.
+moms_marginal = "0.02"
+
+# K-10: tillåten avvikelse från arbetsgivaravgiftens procentsats innan
+# kvoten avgift / bruttolön flaggas. Bred med avsikt — åldersnedsättningar
+# (SAL 2 kap. 27 §) sänker den faktiska kvoten lagligt.
+arbetsgivaravgift_marginal = "0.05"
+
+# K-07: normalskattesatsen. ML 9 kap. 2 §.
+momssats_normal = "0.25"
+
+# A-01/A-02: hur många dagar isär ett bokfört belopp och en utdragsrad får
+# ligga och ändå matchas i pass 2. Bankdagar, helger och betaldagar gör att
+# samma affärshändelse ofta har olika datum i de två källorna. Träffar i pass 2
+# ska visas som osäkra — se BOKSLUTSPROGRAMMET.md §4.3.
+matchningsfonster_dagar = 5
+
+# A-03, pass 3 (parkoppling). Två rader som avser samma händelse med olika
+# belopp — typiskt en bankavgift, en växlingskurs eller en öresavrundning —
+# slås ihop till ETT fynd i stället för en A-01 och en A-02 för samma sak.
+#
+# Två gränser, och den generösare vinner. En ren procentsats missar små
+# betalningar (12 kr avgift på 100 kr är 12 %); ett rent kronbelopp missar
+# stora (12 kr på 500 000 kr är brus). Villkoret är alltså
+#   diff <= max(avstamning_beloppsdiff_kronor, avstamning_beloppsdiff_andel * |belopp|)
+#
+# Vidare gränser ger fler parkopplingar och därmed fler felaktiga sådana.
+# Snävare ger fler dubbelrapporterade händelser (både A-01 och A-02). A-03 är
+# `observation` just för att parkopplingen är en gissning — se
+# BOKSLUTSPROGRAMMET.md §4.3.1.
+avstamning_beloppsdiff_kronor = "50.00"
+avstamning_beloppsdiff_andel = "0.02"
+
+# K-10: full arbetsgivaravgift = arbetsgivaravgifter enligt socialavgiftslagen
+# PLUS allmän löneavgift. Båda leden anges var för sig, eftersom de ändras i
+# olika lagar och vid olika tillfällen.
+#
+#   18,80 %  SAL 2 kap. 26 §, lydelse enligt Lag (2025:1362)
+#   12,62 %  lagen (1994:1920) om allmän löneavgift 3 §, lydelse enligt Lag (2025:1360)
+#   -------
+#   31,42 %  summa
+#
+# Båda lydelserna lästa i Riksdagens öppna data 2026-08-14.
+# SES ÖVER VID VARJE ÅRSSKIFTE. Se BOKSLUTSKONTROLLER.md §8.3 (9b) om att
+# hämta talen maskinellt i stället för för hand.
+[parametrar.arbetsgivaravgift_procent]
+2026 = "0.3142"
+
+[parametrar.arbetsgivaravgift_delar_2026]
+socialavgifter = "0.1880"
+allman_loneavgift = "0.1262"
+
+
+# ---------------------------------------------------------------------------
+# Kontolistor (BAS)
+# ---------------------------------------------------------------------------
+
+[kontolistor]
+# K-08. Konton som är avsedda att nollas — ett kvarvarande saldo på
+# balansdagen är i sig ingen felbokning, men det är nästan alltid något som
+# ska utredas innan bokslutet fastställs.
+avrakningskonton = [
+  "1630",  # Avräkning för skatter och avgifter (skattekonto)
+  "1650",  # Momsfordran
+  "2510",  # Skatteskulder
+  "2512",  # Beräknad inkomstskatt
+  "2514",  # Beräknad särskild löneskatt på pensionskostnader
+  "2518",  # Betald F-skatt
+  "2650",  # Redovisningskonto för moms
+  "2710",  # Personalskatt
+  "2730",  # Lagstadgade sociala avgifter och särskild löneskatt
+  "2731",  # Avräkning lagstadgade sociala avgifter
+]
+
+# K-12. Anläggningstillgångar som normalt skrivs av.
+anlaggningstillgangar_avskrivningsbara = { fran = "1200", till = "1299" }
+
+# K-12. Konton där årets avskrivning på ovanstående ska ha bokförts.
+avskrivningskonton = { fran = "7810", till = "7839" }
+
+# A-01 … A-04. Konton som kan stämmas av mot ett utomstående kontoutdrag.
+# Varje post kräver ett eget utdrag — det finns ingen väg att stämma av ett
+# konto utan att användaren tillhandahåller källan. Skattekontot (1630) ingår
+# eftersom Skatteverket saknar öppet API för det; utdraget hämtas för hand.
+avstamningsbara_konton = [
+  "1630",  # Avräkning för skatter och avgifter (skattekonto)
+  "1910",  # Kassa
+  "1920",  # PlusGiro
+  "1930",  # Företagskonto/checkkonto
+  "1940",  # Övriga bankkonton
+  "1950",  # Bankcertifikat
+]
+
+# K-09. Konton vars saldo normalt ligger på debetsidan (UB >= 0).
+[[kontolistor.debetnormala]]
+fran = "1500"
+till = "1599"
+benamning = "Kundfordringar"
+
+[[kontolistor.debetnormala]]
+fran = "1900"
+till = "1999"
+benamning = "Kassa och bank"
+
+# K-09. Konton vars saldo normalt ligger på kreditsidan (UB <= 0).
+[[kontolistor.kreditnormala]]
+fran = "2400"
+till = "2499"
+benamning = "Leverantörsskulder"
+
+[[kontolistor.kreditnormala]]
+fran = "2600"
+till = "2699"
+benamning = "Momsskulder"
+
+
+# ---------------------------------------------------------------------------
+# Kontrollerna
+# ---------------------------------------------------------------------------
+#
+# Grupp A — bokföringsteknisk integritet
+#
+# De flesta i denna grupp prövar en bokföringsteknisk identitet, inte en
+# lagregel. Hänvisningen anger den bestämmelse vars krav identiteten är en
+# förutsättning för — inte en paragraf som säger "summan ska bli noll".
+# Kommentaren ska säga det, så att ingen läser hänvisningen som mer än den är.
+
+[kontroll.K-01]
+rubrik = "Balansräkningen går inte ihop"
+sfs = "1999:1078"
+lag = "Bokföringslagen"
+beteckning = "5 kap. 1 §"
+lydelse = "Affärshändelserna skall bokföras så att de kan presenteras i registreringsordning (grundbokföring) och i systematisk ordning (huvudbokföring). Detta skall ske på ett sådant sätt att det är möjligt att kontrollera fullständigheten i bokföringsposterna och överblicka verksamhetens förlopp, ställning och resultat."
+kommentar = "Att summan av balans- och resultatkonton är noll är den dubbla bokföringens identitet, inte en uttrycklig lagregel. Paragrafen anges eftersom fullständigheten inte går att kontrollera när identiteten brister."
+verifierad = "2026-08-14"
+
+[kontroll.K-02]
+rubrik = "Verifikation i obalans"
+sfs = "1999:1078"
+lag = "Bokföringslagen"
+beteckning = "5 kap. 1 §"
+kommentar = "Samma som K-01, på verifikationsnivå."
+verifierad = "2026-08-14"
+
+[kontroll.K-03]
+rubrik = "Ingående balans bryter mot föregående års utgående"
+sfs = "1995:1554"
+lag = "Årsredovisningslagen"
+beteckning = "2 kap. 4 § första stycket 7"
+lydelse = "Den ingående balansen för ett räkenskapsår ska stämma överens med den utgående balansen för det närmast föregående räkenskapsåret."
+kommentar = "Kontinuitetsprincipen. Den enda kontrollen i grupp A som prövar en uttrycklig lagregel ordagrant."
+verifierad = "2026-08-14"
+
+[kontroll.K-04]
+rubrik = "Saldot stämmer inte med årets transaktioner"
+sfs = "1999:1078"
+lag = "Bokföringslagen"
+beteckning = "5 kap. 1 §"
+kommentar = "Huvudbokföringen ska kunna härledas ur grundbokföringen. Går saldot inte att räkna fram ur verifikationerna brister det sambandet."
+verifierad = "2026-08-14"
+
+[kontroll.K-05]
+rubrik = "Årets resultat stämmer inte mot resultaträkningen"
+sfs = "1999:1078"
+lag = "Bokföringslagen"
+beteckning = "5 kap. 3 §"
+lydelse = "I samband med att den löpande bokföringen avslutas skall sådana poster som är nödvändiga för att bestämma räkenskapsårets intäkter och kostnader och den finansiella ställningen på balansdagen bokföras."
+verifierad = "2026-08-14"
+
+[kontroll.K-06]
+rubrik = "Transaktionsdatum utanför räkenskapsåret"
+sfs = "1999:1078"
+lag = "Bokföringslagen"
+beteckning = "5 kap. 7 § första stycket"
+lydelse = "Verifikationen skall innefatta uppgift om när den har sammanställts, när affärshändelsen har inträffat, vad denna avser, vilket belopp den gäller och vilken motpart den berör."
+kommentar = "Se även ÅRL 2 kap. 4 § första stycket 4: intäkter och kostnader hänförliga till räkenskapsåret ska tas med oavsett betalningstidpunkt."
+verifierad = "2026-08-14"
+
+[kontroll.K-13]
+rubrik = "Lucka eller ordningsbrott i verifikationsserie"
+sfs = "1999:1078"
+lag = "Bokföringslagen"
+beteckning = "5 kap. 7 § tredje stycket"
+lydelse = "I verifikationen skall det ingå ett verifikationsnummer eller annat identifieringstecken samt sådana övriga uppgifter som är nödvändiga för att sambandet mellan verifikationen och den bokförda affärshändelsen utan svårighet skall kunna fastställas."
+kommentar = "En lucka i en löpande nummerserie kan vara en makulerad verifikation och alltså helt korrekt. Fyndet säger att sambandet inte går att fastställa maskinellt — inte att något är fel."
+verifierad = "2026-08-14"
+
+[kontroll.K-15]
+rubrik = "Möjlig dubbelbokförd verifikation"
+sfs = "1999:1078"
+lag = "Bokföringslagen"
+beteckning = "5 kap. 6 § första stycket"
+lydelse = "För varje affärshändelse ska det finnas en verifikation."
+kommentar = "En verifikation per affärshändelse — två identiska verifikationer samma dag är antingen två verkliga likadana händelser eller en händelse bokförd två gånger. Kontrollen kan inte skilja dem åt; därför observation."
+verifierad = "2026-08-14"
+
+
+# Grupp B — saldologik och avstämning
+
+[kontroll.K-07]
+rubrik = "Utgående moms i orimlig proportion till omsättningen"
+sfs = "2023:200"
+lag = "Mervärdesskattelagen"
+beteckning = "9 kap. 2 §"
+lydelse = "Skatt enligt denna lag tas ut med 25 procent av beskattningsunderlaget om inte annat följer av 4-19 §§."
+kommentar = "Grov rimlighetskontroll. En riktig avstämning per skattesats kräver momskod per transaktion, vilket SIE4 inte bär — se BOKSLUTSKONTROLLER.md §5 grupp B och §9."
+verifierad = "2026-08-14"
+
+[kontroll.K-08]
+rubrik = "Avräkningskonto har kvarvarande saldo"
+sfs = "1999:1078"
+lag = "Bokföringslagen"
+beteckning = "5 kap. 3 §"
+kommentar = "Ett saldo på ett avräkningskonto på balansdagen är ofta en bokslutspost som inte blivit bokförd."
+verifierad = "2026-08-14"
+
+[kontroll.K-09]
+rubrik = "Saldo på fel sida"
+sfs = "1995:1554"
+lag = "Årsredovisningslagen"
+beteckning = "2 kap. 4 § första stycket 6"
+lydelse = "Tillgångar och avsättningar eller skulder får inte kvittas mot varandra. Inte heller får intäkter och kostnader kvittas mot varandra."
+kommentar = "En kundfordran i kredit eller en leverantörsskuld i debet är ofta resultatet av just den kvittning som bestämmelsen förbjuder — eller av en felkontering."
+verifierad = "2026-08-14"
+
+[kontroll.K-10]
+rubrik = "Arbetsgivaravgift i orimlig proportion till lön"
+sfs = "2000:980"
+lag = "Socialavgiftslagen"
+beteckning = "2 kap. 26 §"
+lydelse = "Arbetsgivaravgifterna är 18,80 procent av avgiftsunderlaget."
+kommentar = "Till detta läggs allmän löneavgift 12,62 procent enligt lagen (1994:1920) om allmän löneavgift 3 §, summa 31,42 procent. Se [parametrar.arbetsgivaravgift_procent]. Nedsättningar finns (SAL 2 kap. 27 §, personer som fyllt 67 år) och sänker kvoten lagligt — därför bred marginal och allvarlighet observation."
+verifierad = "2026-08-14"
+
+
+# Grupp C — bokslutsposter
+
+[kontroll.K-11]
+rubrik = "Kostnad nära årsskiftet utan periodiseringsmotpart"
+sfs = "1995:1554"
+lag = "Årsredovisningslagen"
+beteckning = "2 kap. 4 § första stycket 4"
+lydelse = "Intäkter och kostnader som är hänförliga till räkenskapsåret ska tas med oavsett tidpunkten för betalningen."
+kommentar = "Frånvaron av en periodiseringsmotpart bevisar ingenting — kostnaden kan tillhöra det år den bokförts. Fyndet pekar ut var en människa bör titta. Se även BFL 5 kap. 3 §."
+verifierad = "2026-08-14"
+
+[kontroll.K-12]
+rubrik = "Anläggningstillgång utan årets avskrivning"
+sfs = "1995:1554"
+lag = "Årsredovisningslagen"
+beteckning = "4 kap. 4 §"
+kommentar = "Anläggningstillgångar med begränsad nyttjandeperiod ska skrivas av systematiskt över denna period. Kontrollen konstaterar att avskrivning saknas — den räknar inte fram vad den borde vara (lager 2)."
+verifierad = "2026-08-14"
+
+[kontroll.K-14]
+rubrik = "Kontotypavvikelse"
+sfs = "1999:1078"
+lag = "Bokföringslagen"
+beteckning = "5 kap. 1 §"
+kommentar = "Kontrollen prövar #KTYP mot BAS-praxis och mot kontoplanens eget mönster, inte mot lag. Hänvisningen avser kravet på systematisk ordning (huvudbokföring), som en felklassad kontotyp stör. Logiken ligger i parser/kontotyp_vakt.py och ändras inte här."
+verifierad = "2026-08-14"
+
+
+# Grupp D — kontoutdragsavstämning (lager 1b)
+#
+# Skillnaden mot grupp A–C: dessa kontroller jämför bokföringen mot en
+# UTOMSTÅENDE källa. Det är därför de kan hitta sådant som inte finns i
+# bokföringen alls — och därför de är de enda som kan belägga ett brott mot
+# BFL 4 kap. 1 § 1 ("löpande bokföra alla affärshändelser"). En kontroll som
+# bara läser bokföringen kan aldrig veta vad som saknas i den.
+
+[kontroll.A-01]
+rubrik = "Banktransaktion saknas i bokföringen"
+sfs = "1999:1078"
+lag = "Bokföringslagen"
+beteckning = "4 kap. 1 § 1"
+lydelse = "Ett företag ska 1. löpande bokföra alla affärshändelser enligt 5 kap. 1-5 §§."
+kommentar = "En in- eller utbetalning på kontoutdraget är en affärshändelse enligt 1 kap. 2 § 7 ('alla förändringar i storleken och sammansättningen av ett företags förmögenhet ... såsom in- och utbetalningar'). Saknas den i bokföringen är den inte bokförd, punkt. Detta är den enda kontrollen i hela katalogen som kan slå fast det — se även 5 kap. 2 § om bokföringstidpunkt."
+verifierad = "2026-08-14"
+
+[kontroll.A-02]
+rubrik = "Bokförd post saknas på kontoutdraget"
+sfs = "1999:1078"
+lag = "Bokföringslagen"
+beteckning = "5 kap. 1 §"
+kommentar = "Motsatt riktning mot A-01. Kan vara en betalning som aldrig genomfördes, en post bokförd på fel likvidkonto, eller en tidsskillnad över periodgränsen. Kontrollen kan inte skilja dem åt — därför observation, aldrig avvikelse."
+verifierad = "2026-08-14"
+
+[kontroll.A-03]
+rubrik = "Beloppet skiljer"
+sfs = "1999:1078"
+lag = "Bokföringslagen"
+beteckning = "5 kap. 7 § första stycket"
+lydelse = "Verifikationen skall innefatta uppgift om när den har sammanställts, när affärshändelsen har inträffat, vad denna avser, vilket belopp den gäller och vilken motpart den berör."
+kommentar = "Matchad post där bokfört belopp och utdragets belopp går isär. Vanliga och lagliga orsaker finns — avgifter, växlingskurs, öresavrundning — så beloppsskillnaden ska alltid visas i kronor och lämnas till människan att bedöma."
+verifierad = "2026-08-14"
+
+[kontroll.A-04]
+rubrik = "Utgående saldo stämmer inte"
+sfs = "1999:1078"
+lag = "Bokföringslagen"
+beteckning = "5 kap. 4 §"
+lydelse = "Vid bokföringen skall konton över tillgångar, avsättningar, skulder och eget kapital specificeras i en sidoordnad bokföring i den utsträckning det behövs för att ge en tillfredsställande kontroll och överblick."
+kommentar = "Kontoutdraget ÄR den sidoordnade bokföringen för ett likvidkonto. Går slutsaldona isär saknas den tillfredsställande kontrollen. Detta är gruppens viktigaste och billigaste kontroll: stämmer saldot är resten detaljer, stämmer det inte finns det med säkerhet något att hitta."
+verifierad = "2026-08-14"
+
+[kontroll.A-05]
+rubrik = "Kontoutdraget täcker inte hela räkenskapsåret"
+lank_manniska = "https://github.com/quiet-numbers/sie-mcp"
+kommentar = "INGEN rättslig grund, och ska inte ges någon — precis som K-00. Fyndet handlar om räckvidden hos VÅR kontroll, inte om ett fel i bokföringen. Det finns för att en avstämning över halva året annars kan läsas som ett rent besked. Formuleringen i motiveringen ska säga vilken period som faktiskt täcktes."
+verifierad = "2026-08-14"
+
+
+# K-00 är reserverat för motorns eget fynd när en kontroll kastar (I-6).
+# Det har ingen rättslig grund och ska inte ges någon.
+
+[kontroll.K-00]
+rubrik = "Kontrollen kunde inte köras"
+lank_manniska = "https://github.com/quiet-numbers/sie-mcp"
+kommentar = "Internt fynd. Ingen regelhänvisning — detta är ett fel i programvaran, inte i bokföringen."
+verifierad = "2026-08-14"

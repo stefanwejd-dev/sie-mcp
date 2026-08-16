@@ -30,6 +30,9 @@ from mcp_server.server import (
     spiris_sie4export,
     berakna_vasentlighet,
     granska_kontotyper,
+    bokslutskontroll,
+    spiris_bokslutskontroll,
+    hamta_regeltext,
     spiris_artiklar,
     spiris_balansrapport,
     spiris_bankkonton,
@@ -65,9 +68,10 @@ from mcp_server.server import (
     spiris_underlag,
     spiris_hamta_underlag, spiris_offertutkast, spiris_bokforingslas,
     spiris_kvittningskandidater,
+    fraga_myndighetskallor,
 )
 
-FILVERKTYG = [berakna_vasentlighet, granska_kontotyper]
+FILVERKTYG = [berakna_vasentlighet, granska_kontotyper, bokslutskontroll]
 
 # Namn -> giltiga argument. Varje Spiris-verktyg i registret MÅSTE finnas här;
 # test_alla_spirisverktyg_ar_tackta_av_sparrsviten bevakar det. Utan den
@@ -128,6 +132,7 @@ SPIRIS_ARGUMENT: dict[str, tuple] = {
     "spiris_bokforingslas": (),
     "spiris_verifikation": ("fy-1", "v-1"),
     "spiris_bankhandelse": ("b-1", "t-1"),
+    "spiris_bokslutskontroll": ("fy-2026", "2026-12-31"),
 }
 
 _SPIRISFUNKTIONER = {
@@ -185,6 +190,7 @@ _SPIRISFUNKTIONER = {
     "spiris_verifikation": server_modul.spiris_verifikation,
     "spiris_bankhandelse": server_modul.spiris_bankhandelse,
     "spiris_bokforingslas": spiris_bokforingslas,
+    "spiris_bokslutskontroll": spiris_bokslutskontroll,
 }
 
 SPIRISVERKTYG = [
@@ -264,32 +270,41 @@ def test_utkastverktyg_sparras_utan_godkannande():
     assert server_modul.kontrollera_utkast()["info"] == compliance.SPARRTEXT_KORT
 
 
-def test_juridikverktygen_sparras_utan_godkannande():
-    """Juridikverktygen läser ingen bokföring, men `sok_lagstiftning` gör ett
-    UTGÅENDE anrop till data.riksdagen.se med en sökterm som kommer från
-    AI-klienten och kan bära affärskontext.
+def test_hamta_regeltext_sparras_utan_godkannande():
+    """Steg 9a: hamta_regeltext gör ett utgående uppslag (lokalt index eller
+    Riksdagens öppna data). Samma spärr och samma skäl som juridikverktygen
+    — men svarsformen har `fel`, inte `info` (samma som bokslutskontroll-
+    verktygen), så ett eget litet test i stället för att pressas in i
+    juridik-loopen nedan."""
+    svar = asyncio.run(hamta_regeltext("K-01"))
+    assert svar["fel"] == compliance.SPARRTEXT_KORT
+    assert svar["lydelse"] is None
+
+
+def test_fraga_myndighetskallor_sparras_utan_godkannande():
+    """fraga_myndighetskallor (parser/quiet_kalla.py) gör UTGÅENDE anrop till
+    ett tiotal myndighets-API:er och till Anthropic, med en fråga som kommer
+    från AI-klienten och kan bära affärskontext.
 
     Spärrens syfte är att inget utflöde sker innan en människa godkänt
-    villkoren — och ett utflöde är ett utflöde oavsett mottagare. Verktygen
-    registrerades utan spärr; testet finns för att det inte ska kunna hända
-    tyst igen."""
-    for anrop in (
-        lambda: server_modul.sok_lagstiftning("avdrag julbord"),
-        lambda: server_modul.skatteverket_rattslig_vagledning("traktamente"),
-    ):
-        svar = asyncio.run(anrop())
-        assert svar["info"] == compliance.SPARRTEXT_KORT
+    villkoren — och ett utflöde är ett utflöde oavsett mottagare."""
+    svar = asyncio.run(fraga_myndighetskallor("avdrag julbord"))
+    assert svar["forbehall"] == compliance.SPARRTEXT_KORT
+    assert svar["kan_besvaras"] is False
+    assert svar["kallor"] == []
 
 
 def test_ingen_utgaende_trafik_fran_juridikverktyget_utan_godkannande(monkeypatch):
-    """Spärren måste ligga FÖRE nätverksanropet, inte efter."""
-    import juridik_api
+    """Spärren måste ligga FÖRE nätverksanropet (och Anthropic-anropet), inte
+    efter. quiet_kalla importeras lazy inuti verktyget — patchar modulen
+    direkt, inte importnamnet i mcp_server.server, av samma skäl."""
+    import quiet_kalla
 
     def _far_inte_anropas(*a, **k):
         raise AssertionError("nätverksanrop gjordes trots spärrat läge")
 
-    monkeypatch.setattr(juridik_api, "sok_svensk_lagstiftning", _far_inte_anropas)
-    asyncio.run(server_modul.sok_lagstiftning("avdrag julbord"))
+    monkeypatch.setattr(quiet_kalla, "fraga_myndighetskallor", _far_inte_anropas)
+    asyncio.run(server_modul.fraga_myndighetskallor("avdrag julbord"))
 
 
 def test_inget_utkast_skrivs_till_disk_utan_godkannande(monkeypatch):
@@ -324,14 +339,14 @@ def test_alla_registrerade_verktyg_har_ett_sparrtest():
         "hamta_ett", "ingaende_balans", "kontoplan_alla", "kundfakturor", "verifikationer_alla", "valutakurs", "anlaggningstillgangar", "kundreskontraposter", "anvandare", "periodiseringar"}
     tackta = (
         set(SPIRIS_ARGUMENT)
-        | {"berakna_vasentlighet", "granska_kontotyper"}
+        | {"berakna_vasentlighet", "granska_kontotyper", "bokslutskontroll"}
         | {"forbered_kund", "forbered_kundfaktura", "forbered_verifikat",
            "kontrollera_utkast"}
         | {"forbered_fakturautskick", "forbered_betalningspaminnelse",
            "forbered_betalningsregistrering", "forbered_makulering"}
         | {"forbered_saljdokumentutskick", "forbered_efakturautskick",
            "forbered_saljdokumentatgard"}
-        | {"sok_lagstiftning", "skatteverket_rattslig_vagledning"}
+        | {"fraga_myndighetskallor", "hamta_regeltext"}
         | {"forbered_leverantorsfakturautkast", "forbered_attest",
            "forbered_leverantorsbetalning"}
         | {"forbered_masterdataandring", "forbered_masterdataborttagning"}

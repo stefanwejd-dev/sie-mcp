@@ -31,7 +31,7 @@ from parser.kalla_vy import rendera_kallchip
 
 _SIDIKON = _BRANDING_DIR / "icon-128.png"
 st.set_page_config(
-    page_title="Spiris Agent Desktop",
+    page_title="Quiet Numbers — sie-mcp",
     # Quiet Numbers-badgen som flikikon om filen finns, annars emoji-fallback
     # — en saknad tillgångsfil (t.ex. ett grundare klonat repo) ska aldrig
     # hindra appen från att starta.
@@ -39,7 +39,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-st.title("🤖 Spiris Agent Desktop")
+st.title("🤖 Quiet Numbers — sie-mcp")
 st.caption("En tjänst från **Quiet Numbers**.")
 compliance.krav_godkannande(st)
 
@@ -64,7 +64,7 @@ with st.sidebar:
             "<div style='text-align: center; margin-top: 5px; margin-bottom: 25px;'>"
             "<div style='font-size: 1.3rem; font-weight: bold; margin-bottom: 4px;'>Quiet Numbers</div>"
             "<div style='font-size: 0.85rem; opacity: 0.8; line-height: 1.2;'>"
-            "Utgivare av sie-mcp /<br>Spiris Agent Desktop"
+            "Utgivare av sie-mcp"
             "</div>"
             "</div>",
             unsafe_allow_html=True
@@ -225,6 +225,7 @@ sidor = {
     ],
     "Bokföring": [
         st.Page(rum_render.rendera_bockerna,            title="Böckerna",           icon="📚", url_path="bockerna"),
+        st.Page(rum_render.rendera_bokslut,             title="Bokslut",            icon="🧮", url_path="bokslut"),
         st.Page(rum_render.rendera_register,            title="Register",           icon="📇", url_path="register"),
     ],
     "Analys": [

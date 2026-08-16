@@ -91,11 +91,11 @@ import revisionslogg
 import saker_lagring
 import sessionslogg
 import spiris_rag
-import juridik_api
 import utkast
+from bokslutskontroll import kor_kontroller as _kor_bokslutskontroller
 from kontotyp_vakt import analysera_kontotyper
 from namnreferens import las_namnreferens
-from sekretesslager import skapa_kontonamnsmaskerare
+from sekretesslager import maskera_siefil, skapa_kontonamnsmaskerare
 from sie4_parser import parse_sie4
 from spiris_session import SpirisSessionFel, bygg_klient, json_sakert, spara_session
 from vasentlighet import berakna_vasentlighet as _berakna_vasentlighet
@@ -201,6 +201,27 @@ def _tillaten_siefil(sokvag: str) -> Path | None:
     Fail-closed: utan konfiguration tillåts ingenting — hellre ett tydligt
     felmeddelande än en filöppnare styrd av en extern AI."""
     rot_lista = os.environ.get(SIE_KATALOG_ENV, "")
+    rötter = [Path(r).expanduser().resolve() for r in rot_lista.split(os.pathsep) if r]
+    if not rötter:
+        return None
+    try:
+        p = Path(sokvag).expanduser().resolve(strict=True)
+    except OSError:
+        return None
+    return p if any(p.is_relative_to(r) for r in rötter) else None
+
+
+KONTOUTDRAG_KATALOG_ENV = "SIE_MCP_KONTOUTDRAG_KATALOG"  # os.pathsep-separerad lista
+
+
+def _tillaten_kontoutdrag(sokvag: str) -> Path | None:
+    """Sökvägsvakt för kontoutdragsfiler — samma mönster och samma
+    fail-closed-princip som `_tillaten_siefil`, men med en EGEN
+    miljövariabel (BOKSLUTSPROGRAMMET.md §4.4): ett kontoutdrag är det mest
+    personuppgiftstäta materialet i systemet (varje rad kan bära en
+    motparts namn), och förtjänar sin egen tillåtelselista i stället för
+    att ärva SIE-filernas."""
+    rot_lista = os.environ.get(KONTOUTDRAG_KATALOG_ENV, "")
     rötter = [Path(r).expanduser().resolve() for r in rot_lista.split(os.pathsep) if r]
     if not rötter:
         return None
@@ -326,6 +347,116 @@ def granska_kontotyper(sokvag: str) -> dict:
             }
             for avvikelse in avvikelser
         ],
+        "tolkningsbehov_antal": len(sie.tolkningsbehov),
+        "fel": None,
+    }
+
+
+# --- Bokslutskontroller (lager 1) -------------------------------------------
+# Se hantverksbok/BOKSLUTSKONTROLLER.md. Motorn (bokslutskontroll.kor_kontroller)
+# är ett deterministiskt kontrollskikt — ingen språkmodell avgör vad som är
+# ett fynd. Servern gör bara koreografin: läs, maskera, kör motorn, serialisera.
+# I-3 (den lättaste regeln att få katastrofalt fel): MCP-vägen maskerar ALLTID
+# före kontrollen. Streamlit-appens rum (parser/rum_render.py) kör motorn mot
+# den råa SIEFil:en — se hantverksbok/BOKSLUTSKONTROLLER.md §7 steg 8.
+
+
+def _regelhanvisning_till_dict(regel) -> dict | None:
+    if regel is None:
+        return None
+    return {
+        "kalla": regel.kalla,
+        "beteckning": regel.beteckning,
+        "lank_manniska": regel.lank_manniska,
+        "lank_maskin": regel.lank_maskin,
+        "kommentar": regel.kommentar,
+    }
+
+
+def _rattelseforslag_till_dict(forslag) -> dict | None:
+    if forslag is None:
+        return None
+    return {
+        "beskrivning": forslag.beskrivning,
+        "rader": [
+            {
+                "kontonr": rad.kontonr,
+                "debet": float(rad.debet),
+                "kredit": float(rad.kredit),
+                "text": rad.text,
+            }
+            for rad in forslag.rader
+        ],
+        "forbehall": forslag.forbehall,
+    }
+
+
+def _fynd_till_dict(fynd) -> dict:
+    return {
+        "kontroll_id": fynd.kontroll_id,
+        "rubrik": fynd.rubrik,
+        "allvarlighet": fynd.allvarlighet,
+        "motivering": fynd.motivering,
+        "konton": list(fynd.konton),
+        "verifikationer": list(fynd.verifikationer),
+        "belopp": float(fynd.belopp) if fynd.belopp is not None else None,
+        "vasentlig": fynd.vasentlig,
+        "regel": _regelhanvisning_till_dict(fynd.regel),
+        "forslag": _rattelseforslag_till_dict(fynd.forslag),
+    }
+
+
+def _sammanfatta_fynd(fynd: list) -> dict:
+    sammanfattning = {"avvikelse": 0, "observation": 0, "upplysning": 0}
+    for f in fynd:
+        sammanfattning[f.allvarlighet] = sammanfattning.get(f.allvarlighet, 0) + 1
+    return sammanfattning
+
+
+@mcp.tool()
+def bokslutskontroll(sokvag: str) -> dict:
+    """Kör de deterministiska bokslutskontrollerna mot en SIE4-fil och listar
+    fynd: sådant som avviker, saknas eller inte stämmer, med belopp, berörda
+    konton, en motivering på svenska och en regelhänvisning. sokvag ska vara
+    en absolut sökväg.
+
+    Ingen språkmodell avgör vad som är ett fynd — kontrollerna räknar
+    deterministiskt mot bokförd data. Föreslår aldrig en rättning som utförs
+    automatiskt; ett ev. förslag är text, inget som bokförs. Utfallet är en
+    indikation utan garanti, utgör inte revisions- eller redovisningsrådgivning
+    och kan innehålla både falska träffar och missade avvikelser. Varje post
+    ska bedömas självständigt."""
+    tomt_svar = {"fynd": None, "sammanfattning": None, "tolkningsbehov_antal": 0}
+    if not _villkor_godkanda():
+        return _sparrat_svar(tomt_svar, "fel")
+    tillaten = _tillaten_siefil(sokvag)
+    if tillaten is None:
+        _logga_lokalt("Avvisad av sökvägsvakt (eller saknad fil)", FileNotFoundError(sokvag))
+        return {
+            **tomt_svar,
+            "fel": "Kunde inte läsa filen (kontrollera att sökvägen finns och är läsbar).",
+        }
+    try:
+        sie = parse_sie4(str(tillaten))
+    except Exception as e:
+        return {**tomt_svar, "fel": _fel_vid_inlasning(sokvag, e)}
+
+    try:
+        import datetime
+
+        maskerad = maskera_siefil(sie, las_namnreferens()).maskerad_siefil
+        fynd = _kor_bokslutskontroller(maskerad, idag=datetime.date.today())
+    except Exception as e:
+        _logga_lokalt("Oväntat fel vid bokslutskontroll", e)
+        return {
+            **tomt_svar,
+            "tolkningsbehov_antal": len(sie.tolkningsbehov),
+            "fel": "Internt fel vid kontroll.",
+        }
+
+    return {
+        "fynd": [_fynd_till_dict(f) for f in fynd],
+        "sammanfattning": _sammanfatta_fynd(fynd),
         "tolkningsbehov_antal": len(sie.tolkningsbehov),
         "fel": None,
     }
@@ -735,6 +866,24 @@ async def spiris_dashboard(start_datum: str, slut_datum: str) -> dict:
     Rent aggregat utan transaktionsrader."""
     return await _kor_spiris_verktyg(
         lambda k: spiris_rag.hamta_dashboard(k, start_datum, slut_datum)
+    )
+
+
+@mcp.tool()
+async def spiris_bokslutskontroll(rakenskapsar_id: str, tom_datum: str) -> dict:
+    """Kör de deterministiska bokslutskontrollerna mot Spiris-bokföringen
+    (live data, maskerad) för ett räkenskapsår. tom_datum (yyyy-mm-dd) avgör
+    vilka saldon som hämtas.
+
+    Ingen språkmodell avgör vad som är ett fynd — kontrollerna räknar
+    deterministiskt mot bokförd data. Föreslår aldrig en rättning som utförs
+    automatiskt; ett ev. förslag är text, inget som bokförs. Utfallet är en
+    indikation utan garanti, utgör inte revisions- eller redovisningsrådgivning
+    och kan innehålla både falska träffar och missade avvikelser. Varje post
+    ska bedömas självständigt."""
+    return await _kor_spiris_verktyg(
+        lambda k: spiris_rag.hamta_bokslutskontroll(k, rakenskapsar_id, tom_datum),
+        KATEGORI_HUVUDBOK,
     )
 
 
@@ -2432,50 +2581,116 @@ async def verifikatutkast() -> dict:
     return await spiris_verifikatutkast()
 
 
-# --- JURIDIK-VERKTYG (PoC) ---
+# --- JURIDIK & MYNDIGHETSDATA ---
+#
+# Ersätter de tidigare två handskrivna PoC-verktygen (sok_lagstiftning,
+# skatteverket_rattslig_vagledning — se git-historiken om de behöver
+# återställas). Ett enda verktyg mot quiet_oppen_data (parser/quiet_kalla.py)
+# ger nu tillgång till HELA källbunden-chatt-motorn: 62 författningar plus
+# femton myndighetskällor (Riksbanken, SCB, Skatteverket, Kronofogden,
+# Kolada, TED, VIES, SMHI, Skolverket, Trafikanalys, Polisens händelser,
+# JobTech, Sveriges dataportal — inte bara SFS och en söklänk till
+# Skatteverket). Samma "facit"-implementation som körs bakom api.quiet.nu.
 
 @mcp.tool()
-async def sok_lagstiftning(sokord: str) -> dict:
+async def fraga_myndighetskallor(fraga: str) -> dict:
     """
-    AUTONOM TRIGGER: Använd detta verktyg PROAKTIVT när användarens fråga 
-    berör laglighet, avdragsrätt, skattekonsekvenser, eller krav på bokföring.
-    Exempel: "Får jag dra av julbordet?", "När måste jag bokföra kvittot?", 
-    "Får jag göra utdelning?". 
-    
-    Används INTE om användaren enbart frågar efter företagets egna 
-    siffror/saldon (t.ex. "Hur mycket kassa har jag?").
-    
-    Returnerar lagrubriker och exakta URL:er till lagen. Kombinera ofta
-    detta med spiris_kontosaldo för att först läsa beloppet, och sedan
-    slå upp lagen för att ge ett juridiskt förankrat svar.
+    AUTONOM TRIGGER: Använd detta verktyg PROAKTIVT när användarens fråga rör
+    laglighet, avdragsrätt, skattekonsekvenser, krav på bokföring, eller
+    fakta som en svensk myndighet publicerar (t.ex. Riksbankens referensränta,
+    SCB-statistik, Skatteverkets skattetabeller). Exempel: "Får jag dra av
+    julbordet?", "Vad är styrräntan just nu?", "Får jag göra utdelning?".
+
+    Används INTE om användaren enbart frågar efter företagets egna
+    siffror/saldon (t.ex. "Hur mycket kassa har jag?") — kombinera då
+    hellre med spiris_kontosaldo.
+
+    Frågan besvaras av en modell som ENDAST får skriva sådant den faktiskt
+    hittat hos en myndighetskälla — aldrig ur eget minne. Svaret kommer med
+    fotnoter till en källista (myndighet, period, klickbar länk). Hittar
+    motorn inget relevant sätts kan_besvaras=false i stället för att gissa.
     """
-    # Villkorsspärren gäller ÄVEN här. Verktyget läser ingen bokföring, men det
-    # gör ett UTGÅENDE anrop till data.riksdagen.se med en sökterm som kommer
+    # Villkorsspärren gäller ÄVEN här. Verktyget gör UTGÅENDE anrop till ett
+    # tiotal myndighets-API:er och till Anthropic, med en fråga som kommer
     # från AI-klienten och kan bära affärskontext. Spärrens syfte är att inget
-    # utflöde sker innan en människa godkänt villkoren — och ett utflöde är ett
-    # utflöde oavsett vem mottagaren är.
+    # utflöde sker innan en människa godkänt villkoren.
     if not _villkor_godkanda():
-        return _sparrat_svar({"traffar": [], "resultat": []}, "info")
-    return juridik_api.sok_svensk_lagstiftning(sokord)
+        return _sparrat_svar(
+            {"kan_besvaras": False, "svar": "", "kallor": []}, "forbehall"
+        )
+
+    from quiet_kalla import fraga_myndighetskallor as _fraga
+
+    svar = _fraga(fraga)
+    if svar.fel:
+        return {"kan_besvaras": False, "svar": "", "kallor": [], "fel": svar.fel}
+
+    return {
+        "kan_besvaras": svar.kan_besvaras,
+        "svar": svar.text,
+        "kallor": [
+            {
+                "nr": k.nr,
+                "etikett": k.etikett,
+                "myndighet": k.myndighet,
+                "period": k.period,
+                "lank": k.lank_manniska,
+                "licens": k.licens,
+            }
+            for k in svar.kallor
+        ],
+        "forbehall": svar.forbehall,
+        "attribution": svar.attribution,
+    }
+
 
 @mcp.tool()
-async def skatteverket_rattslig_vagledning(sokord: str) -> dict:
-    """
-    AUTONOM TRIGGER: Använd detta verktyg PROAKTIVT när användaren frågar om
-    Skatteverkets tolkningar, beloppsgränser (traktamente, milersättning, 
-    julmåltid), eller specifika skatteregler. 
-    
-    Genererar en sök-länk till Skatteverkets Rättsliga Vägledning.
-    Använd detta för att alltid ge kunden en officiell källa till ditt svar.
-    """
-    # Samma spärr som sok_lagstiftning. Det här verktyget bygger bara en URL
-    # lokalt och gör inget nätverksanrop, men undantag i en spärr ska motiveras
-    # av något starkare än "just det här är ofarligt" — annars urholkas regeln
-    # ett verktyg i taget.
-    if not _villkor_godkanda():
-        return _sparrat_svar({"lank": "", "sokord": sokord}, "info")
-    return juridik_api.skapa_lank_skatteverket(sokord)
+async def hamta_regeltext(kontroll_id: str) -> dict:
+    """Hämtar den faktiska lagtexten för paragrafen som ett bokslutskontroll-
+    fynds regelhänvisning redan pekar mot (kontroll_id, t.ex. "K-01").
 
+    Fyndet är fullständigt utan detta verktyg (se `bokslutskontroll`/
+    `spiris_bokslutskontroll`) — det gör bara att du slipper öppna
+    Riksdagens webbplats själv. Hittar aldrig på en lydelse: kan källan inte
+    svara returneras `lydelse: null` och `fel` säger varför."""
+    # Samma spärr och samma skäl som sok_lagstiftning: verktyget gör ett
+    # utgående uppslag (mot ett lokalt index eller mot data.riksdagen.se)
+    # med ett kontroll-id som kommer från AI-klienten.
+    if not _villkor_godkanda():
+        return _sparrat_svar({"beteckning": None, "lydelse": None}, "fel")
+
+    from bokslutskontroll.regelkalla import hamta_regel, hamta_sfs
+    from bokslutskontroll.regeltext import valj_regeltextkalla
+
+    regel = hamta_regel(kontroll_id)
+    if regel is None:
+        return {
+            "beteckning": None,
+            "lydelse": None,
+            "fel": f"Okänt kontroll-id: {kontroll_id!r}.",
+        }
+
+    sfs = hamta_sfs(kontroll_id)
+    if not sfs:
+        return {
+            "beteckning": regel.beteckning,
+            "lydelse": None,
+            "fel": "Kontrollen har ingen SFS-grundad hänvisning att slå upp lydelsen för.",
+        }
+
+    try:
+        lydelse = valj_regeltextkalla().hamta(sfs, regel.beteckning)
+    except Exception as e:
+        _logga_lokalt("Oväntat fel vid regeltextuppslag", e)
+        return {"beteckning": regel.beteckning, "lydelse": None, "fel": "Internt fel vid uppslaget."}
+
+    if lydelse is None:
+        return {
+            "beteckning": regel.beteckning,
+            "lydelse": None,
+            "fel": "Lydelsen kunde inte hämtas. Regelhänvisningen (kalla/beteckning/länk) gäller ändå.",
+        }
+    return {"beteckning": regel.beteckning, "lydelse": lydelse, "fel": None}
 
 
 @mcp.tool()
