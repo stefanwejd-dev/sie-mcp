@@ -3347,7 +3347,7 @@ def hamta_kontosaldon(klient: _Spirisklient, rakenskapsar_id: str, tom_datum: st
         data.append({
             "kontonr": post.kontonr,
             "kontonamn": konto.namn if konto else "",
-            "saldo": post.belopp,
+            "saldo": post.saldo,
         })
     return data
 

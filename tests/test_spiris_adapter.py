@@ -1701,12 +1701,12 @@ class TestU61_Lasfunktioner_Bockerna:
         mock_spiris_klient.hamta_alla.return_value = [
             {
                 "NumberSeries": "A",
-                "NumberAndNumberSeries": "A 1",
+                "NumberAndNumberSeries": "A1",
                 "VoucherDate": "2026-01-01",
                 "VoucherText": "Test 1",
                 "Rows": [
-                    {"AccountNumber": 1930, "Debit": 100, "Credit": 0, "TransactionText": "TR1"},
-                    {"AccountNumber": 3010, "Debit": 0, "Credit": 100, "TransactionText": "TR2"}
+                    {"AccountNumber": 1930, "DebitAmount": 100, "CreditAmount": 0, "TransactionText": "TR1"},
+                    {"AccountNumber": 3010, "DebitAmount": 0, "CreditAmount": 100, "TransactionText": "TR2"}
                 ]
             }
         ]
@@ -1750,4 +1750,4 @@ class TestU61_Lasfunktioner_Bockerna:
         
         res = hamta_momsoversikt(mock_spiris_klient, "2026-12-31")
         assert isinstance(res, dict)
-        assert "period" in res
+        assert "per_datum" in res
