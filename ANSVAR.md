@@ -15,5 +15,5 @@
 > Programvaran är **spärrad** tills villkoren godkänts punkt för punkt av en människa på datorn där den körs.
 >
 > **Fullständiga villkor:** 📄 [DISCLAIMER_AND_TERMS.md](DISCLAIMER_AND_TERMS.md) · 📄 [LICENSE](LICENSE)
-> **Tekniskt underlag (ingen compliance-utfästelse):** [DATASKYDD.md](DATASKYDD.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [RISKREGISTER.md](RISKREGISTER.md)
-> **Om projektets syfte och dess öppna frågor:** [VARFOR.md](VARFOR.md)
+> **Tekniskt underlag (ingen compliance-utfästelse):** [docs/DATASKYDD.md](docs/DATASKYDD.md)
+> **Om projektets syfte och dess öppna frågor:** [docs/VARFOR.md](docs/VARFOR.md)
