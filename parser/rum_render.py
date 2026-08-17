@@ -405,7 +405,7 @@ def _rendera_fakturautkast(spiris_client_id: str, spiris_client_secret: str) -> 
             )
             andringar: dict[int, str] = {}
             for i, rad in enumerate(tillstand["utkast"]):
-                källa = "📚 tidigare mönster" if rad.kall_ur_minne else "🤖 AI-förslag (konteringsmotorn)"
+                källa = "📚 tidigare mönster" if rad.kall_ur_minne else "AI-förslag (konteringsmotorn)"
                 kol_besk, kol_konto, kol_kalla = st.columns([2, 1, 2])
                 kol_besk.write(f"{rad.beskrivning} — {rad.belopp} kr")
                 nytt = kol_konto.text_input(

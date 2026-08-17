@@ -36,11 +36,11 @@ st.set_page_config(
     # Quiet Numbers-badgen som flikikon om filen finns, annars emoji-fallback
     # — en saknad tillgångsfil (t.ex. ett grundare klonat repo) ska aldrig
     # hindra appen från att starta.
-    page_icon=str(_SIDIKON) if _SIDIKON.exists() else "🤖",
+    page_icon=str(_SIDIKON) if _SIDIKON.exists() else None,
     layout="wide",
     initial_sidebar_state="expanded",
 )
-st.title("🤖 Quiet Numbers — sie-mcp")
+st.title("Quiet Numbers — sie-mcp")
 st.caption("En tjänst från **Quiet Numbers**.")
 compliance.krav_godkannande(st)
 
@@ -84,7 +84,7 @@ with st.sidebar:
     # Automatiserad: när en API-nyckel finns hämtas modeller i bakgrunden (dedup
     # via ai_modeller_for → ingen loop). Leverantör, nyckel och senast valda
     # modell förifylls från .env och persisteras vid ändring.
-    with st.expander("🤖 AI-inställningar", expanded=False):
+    with st.expander("AI-inställningar", expanded=False):
 
         if "ai_leverantör_val" not in st.session_state:
             st.session_state.ai_leverantör_val = (

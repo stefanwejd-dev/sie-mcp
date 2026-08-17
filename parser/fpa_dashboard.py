@@ -370,7 +370,7 @@ def _rendera_ai_panel(sim: dict) -> None:
     enheter) plus de deterministiskt genererade raderna från fpa_vy, som en
     kalkylbladslik tabell. Ingen LLM och ingen omräkning här — både texten och
     tabellens HTML kommer färdiga från vy-lagret."""
-    st.markdown("### 🤖 AI Insights (Narrative Layer)")
+    st.markdown("### AI Insights (Narrative Layer)")
 
     kolumner = st.columns(len(SIMULERADE_NYCKELTAL))
     for kolumn, (nyckel, etikett) in zip(kolumner, SIMULERADE_NYCKELTAL):

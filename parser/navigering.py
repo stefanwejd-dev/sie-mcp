@@ -12,7 +12,7 @@ Varje flik är en egen funktionsyta:
   🔴/🟢 Åtgärder        — allt som kräver ett mänskligt beslut (human-in-the-loop).
   📊 Rapporter          — FP&A-dashboarden (P&L, balans, KPI, kassaflöde).
   📈 Investeringskalkyl — what-if, Sankey och (kommande) capital stack.
-  🤖 AI-Assistent       — ISA 450-analysen och samtalsytan.
+  AI-Assistent          — ISA 450-analysen och samtalsytan.
 
 Badgen på Åtgärder är röd så snart NÅGOT väntar på handläggning, annars grön.
 """
@@ -32,7 +32,7 @@ NAV_NYCKEL = "huvudnav"
 FLIK_DATASTATUS = "⚙️ Datastatus"
 FLIK_RAPPORTER = "📊 Rapporter"
 FLIK_INVESTERINGSKALKYL = "📈 Investeringskalkyl"
-FLIK_AI_ASSISTENT = "🤖 AI-Assistent"
+FLIK_AI_ASSISTENT = "AI-Assistent"
 
 _ATGARDER_BASNAMN = "Åtgärder"
 
