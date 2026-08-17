@@ -3536,6 +3536,8 @@ def hamta_anvandare(klient: _Spirisklient) -> list[dict]:
 def hamta_underlag(klient, include_matched: bool = False) -> list[dict]:
     return klient.hamta_alla("/attachments", params={"includeMatched": str(include_matched).lower()})
 
+_adapter_underlag = hamta_underlag
+
 def hamta_underlag_fil(klient, underlag_id: str) -> tuple[dict, bytes]:
     url = f"https://eaccountingapi.vismaonline.com/v2/attachments/{underlag_id}"
     meta, content = klient.hamta_binart(url)

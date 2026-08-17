@@ -2554,7 +2554,7 @@ def _rendera_kvittning_formular(st: Any) -> None:
 
 def _rendera_underlagskoppling_formular(st: Any) -> None:
     st.write("**Koppla underlag** — fyll i uppgifterna nedan.")
-    from parser.spiris_adapter import UNDERLAG_DOKUMENTTYPER, _adapter_underlag
+    from parser.spiris_adapter import UNDERLAG_DOKUMENTTYPER, hamta_underlag
     import parser.spiris_adapter as spiris_adapter
     from parser.utkast import spara_utkast
     
@@ -2588,7 +2588,7 @@ def _rendera_underlagskoppling_formular(st: Any) -> None:
     dokument_id = dok_map[valt_dok_str] if valt_dok_str else ""
 
     try:
-        underlag = _adapter_underlag(klient, include_matched=False)
+        underlag = hamta_underlag(klient, include_matched=False)
     except Exception as e:
         st.error(f"Kunde inte hämta underlag: {e}")
         return
