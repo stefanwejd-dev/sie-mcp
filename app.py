@@ -249,6 +249,11 @@ sidor = {
     ],
 }
 import kommandofalt
+import kraschlogg
 pg = st.navigation(sidor, position="top")
 kommandofalt.rendera_kommandofalt(st, sidor)
-pg.run()
+
+try:
+    pg.run()
+except Exception as e:
+    kraschlogg.rendera_krasch_ui(e)
