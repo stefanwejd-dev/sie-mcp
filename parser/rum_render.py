@@ -3,6 +3,7 @@ import streamlit as st
 import datetime
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import Any
 from ordbok import Begrepp, hamta
 import snabbvyer
 import snabbvy_render
