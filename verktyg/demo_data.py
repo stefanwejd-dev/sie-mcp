@@ -65,23 +65,85 @@ def ladda_demodata(st) -> None:
     st.session_state.analys_resultat = analys
 
     # 4. Spiris-liknande fyllig reskontra för snabbvyer & rapporter i demoläget
-    # Ger utestående kundfakturor, leverantörsskulder och likviditetsprognos
-    st.session_state.spiris_reskontra = [
-        {
-            "fakturanr": "2026-001",
-            "kund_namn": "Nordic Solutions AB",
-            "belopp": Decimal("45000.00"),
-            "forfallodatum": date(2026, 8, 20),
-            "status": "Utestående",
-        },
-        {
-            "fakturanr": "2026-002",
-            "kund_namn": "Stockholm Tech Hub",
-            "belopp": Decimal("18500.00"),
-            "forfallodatum": date(2026, 8, 10),
-            "status": "Förfallen",
-        },
+    from reskontra_tvatt import Kundpost, Leverantorspost
+    from datetime import timedelta
+
+    idag = date.today()
+
+    st.session_state.spiris_kundreskontra = [
+        Kundpost(
+            kund="Almgren Fastigheter AB",
+            belopp=Decimal("437500.00"),
+            betalstatus="Utestående",
+            forfallodatum=idag + timedelta(days=14),
+            ska_maskeras=False,
+            motpart_id="KUND-001",
+        ),
+        Kundpost(
+            kund="Sjölunds Bygg & Anläggning AB",
+            belopp=Decimal("125000.00"),
+            betalstatus="Förfallen",
+            forfallodatum=idag - timedelta(days=12),
+            ska_maskeras=False,
+            motpart_id="KUND-002",
+        ),
+        Kundpost(
+            kund="Lindqvist Entreprenad AB",
+            belopp=Decimal("250000.00"),
+            betalstatus="Utestående",
+            forfallodatum=idag + timedelta(days=5),
+            ska_maskeras=False,
+            motpart_id="KUND-003",
+        ),
     ]
+
+    st.session_state.spiris_reskontra = [
+        Leverantorspost(
+            leverantor="Bäckströms Elinstallation AB",
+            belopp=Decimal("73000.00"),
+            betalstatus="Utestående",
+            forfallodatum=idag + timedelta(days=8),
+            ska_maskeras=False,
+        ),
+        Leverantorspost(
+            leverantor="Kvarnbergets Fastighets AB",
+            belopp=Decimal("75000.00"),
+            betalstatus="Utestående",
+            forfallodatum=idag + timedelta(days=20),
+            ska_maskeras=False,
+        ),
+        Leverantorspost(
+            leverantor="Nordvik Datorservice AB",
+            belopp=Decimal("38400.00"),
+            betalstatus="Förfallen",
+            forfallodatum=idag - timedelta(days=4),
+            ska_maskeras=False,
+        ),
+    ]
+
+    # 5. Skapa ett representativt utkast i utkastkön för skärmbild
+    try:
+        import utkast
+        befintliga = utkast.lista()
+        if not befintliga:
+            utkast.skapa(
+                typ="kundfaktura",
+                nyttolast={
+                    "kund": "Nordic Solutions AB",
+                    "belopp": "45000.00",
+                    "fakturadatum": idag.isoformat(),
+                    "rader": [
+                        {"beskrivning": "Konsultarvode bokslut", "belopp": "45000.00", "konto": "3011"}
+                    ],
+                },
+                sammanfattning=[
+                    ["Kund", "Nordic Solutions AB"],
+                    ["Belopp", "45 000,00 kr"],
+                    ["Typ", "Konsulttjänster"],
+                ],
+            )
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

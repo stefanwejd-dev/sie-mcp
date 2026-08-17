@@ -20,20 +20,23 @@ def _procent_caption(proc: str, ref: str) -> str:
 def rendera_isa_450(st, sie, maskeringsresultat, ai_konfiguration):
     if sie is None or maskeringsresultat is None:
         st.info("Ladda in data i sidomenyn innan analys kan köras.")
-    elif ai_konfiguration is None or ai_konfiguration.status != "modeller_hämtade":
-        st.info("Ange en API-nyckel i sidomenyn så laddas modellerna, innan analys kan köras.")
-    elif ai_konfiguration.vald_modell is None:
-        st.info("Välj en modell i sidomenyn innan analys kan köras.")
-    elif not leverantor_har_analysstod(ai_konfiguration.leverantör):
-        st.warning(
-            f"Analys stöds ännu inte för {ai_konfiguration.leverantör}. "
-            "Modellhämtning fungerar redan, men den faktiska analysintegrationen "
-            "för den här leverantören är inte byggd än."
-        )
-    else:
+        return
+
+    ai_aktiv = (
+        ai_konfiguration is not None
+        and ai_konfiguration.status == "modeller_hämtade"
+        and ai_konfiguration.vald_modell is not None
+        and leverantor_har_analysstod(ai_konfiguration.leverantör)
+    )
+
+    if ai_aktiv:
         st.caption(
             f"Analysen körs mot {ai_konfiguration.leverantör}, modell "
             f"{ai_konfiguration.vald_modell} — enligt ditt val i sidomenyn."
+        )
+    else:
+        st.caption(
+            "Deterministisk analys (ISA 320/450). Ange en API-nyckel i sidomenyn för att även aktivera djupgående AI-kontomatchning."
         )
 
         _v = berakna_vasentlighet(sie)
@@ -120,40 +123,39 @@ def rendera_isa_450(st, sie, maskeringsresultat, ai_konfiguration):
                 st.session_state.analys_resultat = None
                 st.error(str(fel))
             else:
-                try:
-                    # Fynd A: kontoplanen som binds i haiku-anroparen (och
-                    # bäddas in i varje analysanrop) ska vara MASKERAD — annars
-                    # läcker omdöpta kontonamn ("Lön Anna Andersson") rakt till
-                    # AI:n. Kontonr (nyckeln) är oförändrat, så valideringen står.
-                    haiku_anropare = bygg_analysanropare(
-                        ai_konfiguration,
-                        maskeringsresultat.maskerad_siefil.konton,
-                        logg=st.session_state.sessionslogg,
-                    )
-                except AnalysanropareFel as fel:
-                    st.session_state.analys_resultat = None
-                    st.error(str(fel))
+                if ai_aktiv:
+                    try:
+                        haiku_anropare = bygg_analysanropare(
+                            ai_konfiguration,
+                            maskeringsresultat.maskerad_siefil.konton,
+                            logg=st.session_state.sessionslogg,
+                        )
+                    except AnalysanropareFel as fel:
+                        st.session_state.analys_resultat = None
+                        st.error(str(fel))
+                        haiku_anropare = None
                 else:
+                    haiku_anropare = lambda items, sys_prompt: []
+
+                if haiku_anropare is not None:
                     st.session_state.analys_resultat = kor_analys(
                         sie, maskeringsresultat, haiku_anropare,
                         utfallsväsentlighet, väsentlighetstal,
                     )
-                    # Art. 30-stöd (svaghet 3): logga metadata om AI-utflödet
-                    # — tidpunkt, mottagare, datakategorier, maskeringsstatistik.
-                    # Aldrig nyttolasten själv.
-                    revisionslogg.logga_ai_utflode(
-                        ai_konfiguration.leverantör, ai_konfiguration.vald_modell,
-                        "analys",
-                        datakategorier=[
-                            "kontoplan", "sandningsbara_verifikationer",
-                            "väsentlighetstal",
-                        ],
-                        maskeringsstatistik=(
-                            revisionslogg.maskeringsstatistik_fran_resultat(
-                                maskeringsresultat
-                            )
-                        ),
-                    )
+                    if ai_aktiv:
+                        revisionslogg.logga_ai_utflode(
+                            ai_konfiguration.leverantör, ai_konfiguration.vald_modell,
+                            "analys",
+                            datakategorier=[
+                                "kontoplan", "sandningsbara_verifikationer",
+                                "väsentlighetstal",
+                            ],
+                            maskeringsstatistik=(
+                                revisionslogg.maskeringsstatistik_fran_resultat(
+                                    maskeringsresultat
+                                )
+                            ),
+                        )
 
     # Läs om: knapptrycket ovan kan just ha satt ETT nytt resultat eller
     # nollställt det. Frågefliken nedan läser samma variabel.

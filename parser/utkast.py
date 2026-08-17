@@ -233,6 +233,26 @@ def skapa(
     return u
 
 
+def spara_utkast(*args, **kwargs) -> str:
+    """Kompatibilitetsfunktion som anropar skapa() och returnerar utkast_id som sträng."""
+    if len(args) == 4:
+        # Signatur: spara_utkast(utkast_dir, typ, nyttolast, sammanfattning)
+        _, typ, nyttolast, sammanfattning = args
+        u = skapa(typ=typ, nyttolast=nyttolast, sammanfattning=sammanfattning)
+        return u.utkast_id
+    elif len(args) == 3:
+        # Signatur: spara_utkast(typ, nyttolast, sammanfattning)
+        typ, nyttolast, sammanfattning = args
+        u = skapa(typ=typ, nyttolast=nyttolast, sammanfattning=sammanfattning)
+        return u.utkast_id
+    else:
+        typ = kwargs.get("typ")
+        nyttolast = kwargs.get("nyttolast")
+        sammanfattning = kwargs.get("sammanfattning", [])
+        u = skapa(typ=typ, nyttolast=nyttolast, sammanfattning=sammanfattning)
+        return u.utkast_id
+
+
 def las(utkast_id: str) -> Utkast | None:
     try:
         fil = _sokvag(utkast_id)

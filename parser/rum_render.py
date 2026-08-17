@@ -950,15 +950,16 @@ def rendera_bockerna() -> None:
         tomt_lage(st, hamta("bokforing"), "Bokföring")
         return
         
+    klient = None
+    if st.session_state.get("spiris_tokens"):
+        try:
+            # App config laddas en gång per request och är oföränderlig
+            cfg = app_config.las_config()
+            klient = _bygg_spiris_klient_fran_session(cfg.spiris_client_id, cfg.spiris_client_secret)
+        except Exception:
+            pass
+
     if "bockerna_kontoplan" not in st.session_state:
-        klient = None
-        if st.session_state.get("spiris_tokens"):
-            try:
-                # App config laddas en gång per request och är oföränderlig
-                cfg = app_config.las_config()
-                klient = _bygg_spiris_klient_fran_session(cfg.spiris_client_id, cfg.spiris_client_secret)
-            except Exception:
-                pass
         import app_tillstand
         app_tillstand.ladda_bockerna_data(st, klient)
 
@@ -1099,9 +1100,26 @@ def rendera_bokslut() -> None:
         underlag=st.session_state.get("bokslut_underlag"),
     )
 
-    snabbvy_render.rendera_snabbvyfalt(
-        st, snabbvyer.SNABBVYER_BOKSLUT, "snabbvy_bokslut", vydata
-    )
+    if hasattr(st, "tabs"):
+        tab_kontroll, tab_isa = st.tabs(["🔍 Bokslutskontroller", "📊 ISA 320/450 Väsentlighetsanalys"])
+
+        with tab_kontroll:
+            snabbvy_render.rendera_snabbvyfalt(
+                st, snabbvyer.SNABBVYER_BOKSLUT, "snabbvy_bokslut", vydata
+            )
+
+        with tab_isa:
+            from isa_render import rendera_isa_450
+            rendera_isa_450(
+                st,
+                sie=sie,
+                maskeringsresultat=st.session_state.get("maskeringsresultat"),
+                ai_konfiguration=st.session_state.get("ai_konfiguration"),
+            )
+    else:
+        snabbvy_render.rendera_snabbvyfalt(
+            st, snabbvyer.SNABBVYER_BOKSLUT, "snabbvy_bokslut", vydata
+        )
 
 
 def rendera_rapporter() -> None:
