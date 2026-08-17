@@ -42,7 +42,14 @@ st.set_page_config(
 )
 st.title("Quiet Numbers — sie-mcp")
 st.caption("En tjänst från **Quiet Numbers**.")
-compliance.krav_godkannande(st)
+
+# I demoläge (t.ex. på webbdemo app.quiet.nu) öppnas appen direkt för besökaren
+# med tydlig ansvarsfriskrivning i stället för att blockera demonstrationen.
+if not (os.environ.get("SIE_MCP_DEMO") == "1" or "--demo" in sys.argv):
+    compliance.krav_godkannande(st)
+else:
+    with st.expander("⚖️ Användarvillkor & Ansvarsfriskrivning (Demoläge)", expanded=False):
+        st.markdown(compliance.villkorstext())
 
 app_tillstand.initiera(st)
 
