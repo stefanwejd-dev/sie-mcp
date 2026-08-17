@@ -7,6 +7,9 @@
 
 **Utgiven av Quiet Numbers.**
 
+> [!NOTE]
+> **Om detta projekt:** Detta är ett självständigt hobby- och utvecklingsprojekt under aktiv framväxt. Projektet är byggt med en testdriven arkitektur för att generera en validering av SIE4-standarder, regelverk och ISA-kontroller. Det är ett pågående arbete och ett utforskande hantverk – det är långt ifrån säkert att programvaran i faktisk mening fullt ut lyckas uppfylla alla de ambitionskrav som satts upp, och koden tillhandahålls som ett öppet experiment och läroprojekt.
+
 **sie-mcp** är ett lokalt svenskt verktyg i Python för att läsa, analysera och ställa frågor mot bokföringsdata (från SIE4-filer och affärssystemet Spiris/Visma eAccounting) med stöd för både lokala modeller (Ollama) och molnbaserade AI-modeller.
 
 Verktyget har två separata gränssnitt mot samma delade kärna:
