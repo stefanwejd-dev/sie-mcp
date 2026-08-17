@@ -1,0 +1,16 @@
+[Unit]
+Description=Quiet Numbers SIE-MCP Streamlit Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/sie-mcp
+Environment="PATH=/var/www/sie-mcp/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
+Environment="SIE_MCP_DEMO=1"
+ExecStart=/var/www/sie-mcp/venv/bin/streamlit run app.py --server.port=8501 --server.address=127.0.0.1 --server.headless=true --server.enableCORS=false --server.enableXsrfProtection=false
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
