@@ -594,6 +594,50 @@ def rendera_oversikt() -> None:
 # här: maskeringsbehov som väntar på beslut + obehandlade verifikationsavvikelser.
 
 
+def _analysera_kontoperioder(sie: Any, kontonr: str) -> list[dict[str, Any]]:
+    """Analyserar månad för månad när verifikationstransaktioner och saldon registrerats."""
+    from collections import defaultdict
+    manader = defaultdict(lambda: {"ver_belopp": Decimal("0"), "antal_ver": 0, "ps_belopp": Decimal("0")})
+    
+    # 1. Verifikationsrörelser per månad
+    for v in getattr(sie, "verifikationer", []):
+        if not getattr(v, "verdatum", None):
+            continue
+        m_key = v.verdatum.strftime("%Y-%m")
+        for t in getattr(v, "transaktioner", []):
+            if t.kontonr == kontonr:
+                manader[m_key]["ver_belopp"] += t.belopp
+                manader[m_key]["antal_ver"] += 1
+
+    # 2. Periodsaldon om det finns i SIE-filen
+    for ps in getattr(sie, "periodsaldon", []):
+        if ps.kontonr == kontonr and ps.årsnr == 0:
+            p_str = str(ps.period)
+            if len(p_str) == 6:
+                m_key = f"{p_str[:4]}-{p_str[4:]}"
+            else:
+                m_key = p_str
+            manader[m_key]["ps_belopp"] += ps.saldo
+
+    if not manader:
+        return []
+
+    rader = []
+    for m in sorted(manader.keys()):
+        d = manader[m]
+        diff = d["ps_belopp"] - d["ver_belopp"] if d["ps_belopp"] != Decimal("0") else None
+        status = "🔴 Avvikelse" if (diff is not None and abs(diff) > Decimal("1.00")) else ("✅ Matchar" if diff is not None else "ℹ️ Bokfört")
+        rader.append({
+            "Månad / Period": m,
+            "Bokfört i verifikationer": f"{d['ver_belopp']:,.2f} kr".replace(",", " ").replace(".", ","),
+            "Antal verifikat": d["antal_ver"],
+            "Periodsaldo (huvudbok)": f"{d['ps_belopp']:,.2f} kr".replace(",", " ").replace(".", ",") if d["ps_belopp"] != Decimal("0") else "—",
+            "Månadsdiff": f"{diff:,.2f} kr".replace(",", " ").replace(".", ",") if diff is not None else "—",
+            "Status": status,
+        })
+    return rader
+
+
 def rendera_beslut(spiris_client_id: str, spiris_client_secret: str) -> None:
     datakälla = st.session_state.get("aktiv_datakälla", "Ladda upp lokal SIE4-fil")
     sie = st.session_state.get("sie")
@@ -912,6 +956,13 @@ def rendera_beslut(spiris_client_id: str, spiris_client_secret: str) -> None:
                                     ktyp = getattr(kobj, "typ", getattr(kobj, "kontotyp", "—")) if kobj else "—"
                                     konto_rader.append({"Kontonr": knr, "Kontonamn": knamn, "Typ": ktyp})
                                 st.dataframe(konto_rader, hide_index=True)
+
+                                # Månadsavstämning / Tidslinje över när rörelser och differenser uppstod
+                                for knr in fynd.konton:
+                                    period_rader = _analysera_kontoperioder(sie, knr)
+                                    if period_rader:
+                                        st.markdown(f"**📅 Månadsavstämning & Tidslinje (Konto {knr}):**")
+                                        st.dataframe(period_rader, hide_index=True)
 
                             # Berörda verifikationer med detaljerade transaktioner
                             if fynd.verifikationer:
