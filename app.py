@@ -125,22 +125,37 @@ with st.sidebar:
             )
             api_nyckel = ""
         else:
-            st.caption(
-                f"🌐 **Molnbaserad AI (USA)** — Externa anrop sker under ditt eget avtal med "
-                f"**{vald_leverantör}** (BYOK). Du ansvarar för ditt DPA och laglig grund "
-                "(se [DISCLAIMER_AND_TERMS.md](file:///DISCLAIMER_AND_TERMS.md))."
-            )
-            if "ai_api_nyckel_val" not in st.session_state:
-                st.session_state.ai_api_nyckel_val = config.ai_api_nyckel
-            api_nyckel = st.text_input("API-nyckel", type="password", key="ai_api_nyckel_val")
+            server_har_nyckel = bool(config.ai_api_nyckel)
+            if server_har_nyckel and (os.environ.get("SIE_MCP_DEMO") == "1" or "--demo" in sys.argv):
+                st.success("🟢 Förkonfigurerad AI-åtkomst aktiv (Claude)")
+                st.caption("Servern tillhandahåller AI för denna demo. Din anslutning är skyddad och du behöver inte ange någon egen API-nyckel.")
+                användar_nyckel = st.text_input(
+                    "Åsidosätt med egen API-nyckel (valfritt)",
+                    type="password",
+                    key="ai_egen_api_nyckel_val",
+                    placeholder="Lämna tomt för att använda serverns AI",
+                )
+                api_nyckel = användar_nyckel.strip() if användar_nyckel.strip() else config.ai_api_nyckel
+            else:
+                st.caption(
+                    f"🌐 **Molnbaserad AI (USA)** — Externa anrop sker under ditt eget avtal med "
+                    f"**{vald_leverantör}** (BYOK). Du ansvarar för ditt DPA och laglig grund "
+                    "(se [DISCLAIMER_AND_TERMS.md](file:///DISCLAIMER_AND_TERMS.md))."
+                )
+                if "ai_api_nyckel_val" not in st.session_state:
+                    st.session_state.ai_api_nyckel_val = ""
+                api_nyckel = st.text_input("API-nyckel", type="password", key="ai_api_nyckel_val")
+                if not api_nyckel and config.ai_api_nyckel:
+                    api_nyckel = config.ai_api_nyckel
 
         app_config.spara_om_andrad("ai_leverantör", vald_leverantör, config)
-        app_config.spara_om_andrad("ai_api_nyckel", api_nyckel, config)
+        if api_nyckel and api_nyckel != config.ai_api_nyckel:
+            app_config.spara_om_andrad("ai_api_nyckel", api_nyckel, config)
 
         # Auto-hämta modeller när nyckel finns (eller när leverantören inte
         # kräver någon, dvs. Ollama); vakten sätts FÖRE hämtningen.
         _kraver_nyckel = vald_leverantör != "Ollama"
-        _ai_id = (vald_leverantör, api_nyckel)
+        _ai_id = (vald_leverantör, bool(api_nyckel))
         if (api_nyckel or not _kraver_nyckel) and st.session_state.ai_modeller_for != _ai_id:
             st.session_state.ai_modeller_for = _ai_id
             with st.spinner("Hämtar modeller…"):
