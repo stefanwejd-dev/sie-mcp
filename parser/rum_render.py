@@ -907,9 +907,9 @@ def rendera_beslut(spiris_client_id: str, spiris_client_secret: str) -> None:
                                 st.markdown("**Berörda konton:**")
                                 konto_rader = []
                                 for knr in fynd.konton:
-                                    kobj = sie.konton.get(knr) if hasattr(sie, "konton") else None
-                                    knamn = kobj.kontonamn if kobj else "—"
-                                    ktyp = kobj.kontotyp if kobj else "—"
+                                    kobj = sie.konton.get(knr) if hasattr(sie, "konton") and isinstance(sie.konton, dict) else None
+                                    knamn = getattr(kobj, "namn", getattr(kobj, "kontonamn", "—")) if kobj else "—"
+                                    ktyp = getattr(kobj, "typ", getattr(kobj, "kontotyp", "—")) if kobj else "—"
                                     konto_rader.append({"Kontonr": knr, "Kontonamn": knamn, "Typ": ktyp})
                                 st.dataframe(konto_rader, hide_index=True)
 
@@ -931,8 +931,8 @@ def rendera_beslut(spiris_client_id: str, spiris_client_secret: str) -> None:
                                         st.caption(f"Verifikat **{match_ver.serie} {match_ver.vernr}** ({match_ver.verdatum}) — *{match_ver.vertext or 'Ingen text'}*")
                                         trans_rader = []
                                         for t in match_ver.transaktioner:
-                                            kobj = sie.konton.get(t.kontonr) if hasattr(sie, "konton") else None
-                                            knamn = kobj.kontonamn if kobj else ""
+                                            kobj = sie.konton.get(t.kontonr) if hasattr(sie, "konton") and isinstance(sie.konton, dict) else None
+                                            knamn = getattr(kobj, "namn", getattr(kobj, "kontonamn", "")) if kobj else ""
                                             trans_rader.append({
                                                 "Konto": f"{t.kontonr} {knamn}".strip(),
                                                 "Belopp": f"{t.belopp:,.2f} kr".replace(",", " ").replace(".", ","),
