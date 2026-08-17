@@ -503,46 +503,90 @@ def rendera_oversikt() -> None:
 
         st.subheader("Översikt")
         översikt = bygg_oversikt(sie, maskeringsresultat)
+        
+        if "oversikt_filter" not in st.session_state:
+            st.session_state.oversikt_filter = "alla"
+
         kol1, kol2, kol3, kol4, kol5, kol6 = st.columns(6)
-        kol1.metric("Verifikationer", översikt.antal_verifikationer)
-        kol2.metric("Tolkningsbehov", översikt.antal_tolkningsbehov)
-        kol3.metric("Maskeringsbehov", översikt.antal_maskeringsbehov)
-        kol4.metric("Sandningsbara ver.", översikt.antal_sandningsbara_verifikationer)
-        kol5.metric("Blockerade ver.", översikt.antal_blockerade_verifikationer)
-        kol6.metric("Prosa sändningsbar", översikt.prosa_sandningsbar)
+        with kol1:
+            st.metric("Verifikationer", översikt.antal_verifikationer)
+            if st.button(f"🔍 Visa ({översikt.antal_verifikationer})", key="btn_ov_ver"):
+                st.session_state.oversikt_filter = "verifikationer"
+                st.rerun()
+        with kol2:
+            st.metric("Tolkningsbehov", översikt.antal_tolkningsbehov)
+            if st.button(f"🔍 Visa ({översikt.antal_tolkningsbehov})", key="btn_ov_tolk"):
+                st.session_state.oversikt_filter = "tolkningsbehov"
+                st.rerun()
+        with kol3:
+            st.metric("Maskeringsbehov", översikt.antal_maskeringsbehov)
+            if st.button(f"🔍 Visa ({översikt.antal_maskeringsbehov})", key="btn_ov_mask"):
+                st.session_state.oversikt_filter = "maskeringsbehov"
+                st.rerun()
+        with kol4:
+            st.metric("Sändningsbara ver.", översikt.antal_sandningsbara_verifikationer)
+            if st.button(f"🔍 Visa ({översikt.antal_sandningsbara_verifikationer})", key="btn_ov_sand"):
+                st.session_state.oversikt_filter = "sandningsbara"
+                st.rerun()
+        with kol5:
+            st.metric("Blockerade ver.", översikt.antal_blockerade_verifikationer)
+            if st.button(f"🔍 Visa ({översikt.antal_blockerade_verifikationer})", key="btn_ov_block"):
+                st.session_state.oversikt_filter = "blockerade"
+                st.rerun()
+        with kol6:
+            st.metric("Prosa sändningsbar", översikt.prosa_sandningsbar)
+            if st.button("📋 Visa alla", key="btn_ov_alla"):
+                st.session_state.oversikt_filter = "alla"
+                st.rerun()
 
-        st.divider()
-        st.subheader("Tolkningsbehov")
-        if sie.tolkningsbehov:
-            st.dataframe(
-                [
-                    {
-                        "Radnummer": tolkningsbehov.radnummer,
-                        "Råtext": tolkningsbehov.råtext,
-                        "Etikett": tolkningsbehov.etikett,
-                        "Anledning": tolkningsbehov.anledning,
-                    }
-                    for tolkningsbehov in sie.tolkningsbehov
-                ]
-            )
-        else:
-            st.write("Inga tolkningsbehov.")
+        ov_filter = st.session_state.oversikt_filter
 
-        st.divider()
-        st.subheader("Sandningsbara verifikationer")
-        st.caption(
-            "Verifikationer med olösta maskeringsbehov blockeras från senare "
-            "AI-analys. Ingen rad försvinner tyst — de hanteras i fliken Åtgärder."
-        )
-        if maskeringsresultat.sandningsbara_verifikationer:
-            st.dataframe(
-                [
-                    verifikation_till_visningsrad(v)
-                    for v in maskeringsresultat.sandningsbara_verifikationer
-                ]
+        if ov_filter in ("alla", "tolkningsbehov"):
+            st.divider()
+            st.subheader("Tolkningsbehov")
+            if sie.tolkningsbehov:
+                st.dataframe(
+                    [
+                        {
+                            "Radnummer": tolkningsbehov.radnummer,
+                            "Råtext": tolkningsbehov.råtext,
+                            "Etikett": tolkningsbehov.etikett,
+                            "Anledning": tolkningsbehov.anledning,
+                        }
+                        for tolkningsbehov in sie.tolkningsbehov
+                    ]
+                )
+            else:
+                st.write("Inga tolkningsbehov.")
+
+        if ov_filter in ("alla", "sandningsbara", "verifikationer"):
+            st.divider()
+            st.subheader("Sändningsbara verifikationer")
+            st.caption(
+                "Verifikationer med olösta maskeringsbehov blockeras från senare "
+                "AI-analys. Ingen rad försvinner tyst — de hanteras i fliken Åtgärder."
             )
-        else:
-            st.write("Inga sandningsbara verifikationer.")
+            if maskeringsresultat.sandningsbara_verifikationer:
+                st.dataframe(
+                    [
+                        verifikation_till_visningsrad(v)
+                        for v in maskeringsresultat.sandningsbara_verifikationer
+                    ]
+                )
+            else:
+                st.write("Inga sandningsbara verifikationer.")
+
+        if ov_filter in ("alla", "blockerade") and ov_filter == "blockerade":
+            st.divider()
+            st.subheader("Blockerade verifikationer")
+            blockerade = [
+                v for v in sie.verifikationer
+                if v not in maskeringsresultat.sandningsbara_verifikationer
+            ]
+            if blockerade:
+                st.dataframe([verifikation_till_visningsrad(v) for v in blockerade])
+            else:
+                st.write("Inga blockerade verifikationer.")
 
 
 # --- Flik: 🔴/🟢 Åtgärder ------------------------------------------------------
@@ -704,151 +748,226 @@ def rendera_beslut(spiris_client_id: str, spiris_client_secret: str) -> None:
         if not vantande_utkast:
             st.info("Ladda in data i sidomenyn för att se vad som behöver åtgärdas.")
     else:
-        kol_mask, kol_avv, kol_tot = st.columns(3)
-        kol_mask.metric("Maskeringsbehov", atgardsstatus.antal_maskeringsbehov)
-        kol_avv.metric("Verifikationsavvikelser", atgardsstatus.antal_verifikationsavvikelser)
-        kol_tot.metric("Totalt att åtgärda", atgardsstatus.antal_totalt)
+        if "atgard_filter" not in st.session_state:
+            st.session_state.atgard_filter = "alla"
+
+        kol_mask, kol_avv, kol_utk, kol_tot = st.columns(4)
+        with kol_mask:
+            st.metric("Maskeringsbehov", atgardsstatus.antal_maskeringsbehov)
+            if st.button(f"🔍 Granska maskering ({atgardsstatus.antal_maskeringsbehov})", key="btn_filt_mask"):
+                st.session_state.atgard_filter = "maskering"
+                st.rerun()
+
+        with kol_avv:
+            st.metric("Verifikationsavvikelser", atgardsstatus.antal_verifikationsavvikelser)
+            if st.button(f"🔍 Granska avvikelser ({atgardsstatus.antal_verifikationsavvikelser})", key="btn_filt_avv"):
+                st.session_state.atgard_filter = "avvikelser"
+                st.rerun()
+
+        with kol_utk:
+            st.metric("Utkast i kön", len(vantande_utkast))
+            if st.button(f"🔍 Granska utkast ({len(vantande_utkast)})", key="btn_filt_utk"):
+                st.session_state.atgard_filter = "utkast"
+                st.rerun()
+
+        with kol_tot:
+            st.metric("Totalt att åtgärda", atgardsstatus.antal_totalt)
+            if st.button("📋 Visa alla delar", key="btn_filt_alla"):
+                st.session_state.atgard_filter = "alla"
+                st.rerun()
+
+        aktivt_filter = st.session_state.atgard_filter
 
         if not atgardsstatus.kräver_åtgärd:
             st.success("🟢 Inget väntar på handläggning.")
 
-        st.divider()
-        st.subheader("Maskeringsbehov (human-in-the-loop)")
-        # Bara rader som fortfarande väntar på beslut visas. Redan avgjorda
-        # rader — maskerade SÅVÄL SOM undantagna — försvinner ur listan.
-        behov_lista = obeslutade_behov(maskeringsresultat.maskeringsbehov)
-        if not behov_lista:
-            st.write("Inga maskeringsbehov (kända namn maskeras redan automatiskt).")
-        else:
-            # Gruppera per unikt namn — varje namn visas EXAKT en gång, oavsett hur
-            # många verifikationer det förekommer i.
-            unika = unika_namn_behov(behov_lista)
-            st.write(
-                f"AI:n hittade **{len(unika)}** unika namn att granska. Välj per namn "
-                "om det ska **maskeras** eller lämnas som **ingen maskering**, och "
-                "justera texten vid behov. Vid **Tillämpa maskering** sparas maskerade "
-                "namn i det krypterade maskeringsminnet, och namn markerade som ingen "
-                "maskering läggs i den krypterade undantagslistan — de flaggas då "
-                "aldrig igen i framtida filer eller sessioner. Rader du lämnar som "
-                "**avvakta** ligger kvar och fortsätter blockera sina verifikationer."
-            )
+        if aktivt_filter in ("alla", "maskering"):
+            st.divider()
+            st.subheader("🛡️ Maskeringsbehov (human-in-the-loop)")
+            behov_lista = obeslutade_behov(maskeringsresultat.maskeringsbehov)
+            if not behov_lista:
+                st.write("Inga maskeringsbehov (kända namn maskeras redan automatiskt).")
+            else:
+                unika = unika_namn_behov(behov_lista)
+                st.write(
+                    f"AI:n hittade **{len(unika)}** unika namn att granska. Välj per namn "
+                    "om det ska **maskeras** eller lämnas som **ingen maskering**, och "
+                    "justera texten vid behov. Vid **Tillämpa maskering** sparas maskerade "
+                    "namn i det krypterade maskeringsminnet, och namn markerade som ingen "
+                    "maskering läggs i den krypterade undantagslistan — de flaggas då "
+                    "aldrig igen i framtida filer eller sessioner. Rader du lämnar som "
+                    "**avvakta** ligger kvar och fortsätter blockera sina verifikationer."
+                )
 
-            # Globala knappar sätter alla per-namn-val och kör om.
-            kol_alla, kol_ingen = st.columns(2)
-            if kol_alla.button("Maskera alla"):
+                kol_alla, kol_ingen = st.columns(2)
+                if kol_alla.button("Maskera alla"):
+                    for behov in unika:
+                        st.session_state[f"beslut_namn_{behov.misstänkt_text}"] = BESLUT_MASKERA
+                    st.rerun()
+                if kol_ingen.button("Undanta alla (ingen maskering)"):
+                    for behov in unika:
+                        st.session_state[f"beslut_namn_{behov.misstänkt_text}"] = (
+                            BESLUT_INGEN_MASKERING
+                        )
+                    st.rerun()
+
+                beslut_per_namn: dict[str, dict] = {}
                 for behov in unika:
-                    st.session_state[f"beslut_namn_{behov.misstänkt_text}"] = BESLUT_MASKERA
-                st.rerun()
-            # Medvetet en annan etikett än förr: knappen allowlistar numera varje
-            # namn permanent, vilket är ett helt annat åtagande än att bara låta
-            # bli att bocka i en ruta.
-            if kol_ingen.button("Undanta alla (ingen maskering)"):
-                for behov in unika:
-                    st.session_state[f"beslut_namn_{behov.misstänkt_text}"] = (
-                        BESLUT_INGEN_MASKERING
+                    namn = behov.misstänkt_text
+                    beslut_nyckel = f"beslut_namn_{namn}"
+                    text_nyckel = f"override_namn_{namn}"
+                    if beslut_nyckel not in st.session_state:
+                        st.session_state[beslut_nyckel] = BESLUT_AVVAKTA
+                    if text_nyckel not in st.session_state:
+                        st.session_state[text_nyckel] = namn
+
+                    antal = sum(1 for b in behov_lista if b.misstänkt_text == namn)
+                    st.markdown("---")
+                    st.caption(f"{antal} förekomst(er) · källa: {behov.träffkälla}")
+                    st.markdown(
+                        markera_kanslig_text(_hitta_originaltext(sie, behov), namn),
+                        unsafe_allow_html=True,
                     )
-                st.rerun()
-
-            beslut_per_namn: dict[str, dict] = {}
-            for behov in unika:
-                namn = behov.misstänkt_text
-                beslut_nyckel = f"beslut_namn_{namn}"
-                text_nyckel = f"override_namn_{namn}"
-                if beslut_nyckel not in st.session_state:
-                    # Default är AVVAKTA, inte "maskera": raden ska kräva ett
-                    # aktivt mänskligt beslut för att försvinna ur listan.
-                    # Avvakta blockerar fortsatt sändning, så defaulten läcker
-                    # ingenting — den är bara ärlig om att inget beslutats än.
-                    st.session_state[beslut_nyckel] = BESLUT_AVVAKTA
-                if text_nyckel not in st.session_state:
-                    st.session_state[text_nyckel] = namn
-
-                antal = sum(1 for b in behov_lista if b.misstänkt_text == namn)
-                st.markdown("---")
-                st.caption(f"{antal} förekomst(er) · källa: {behov.träffkälla}")
-                st.markdown(
-                    markera_kanslig_text(_hitta_originaltext(sie, behov), namn),
-                    unsafe_allow_html=True,
-                )
-                kol_val, kol_text = st.columns([2, 2])
-                beslut = kol_val.radio(
-                    "Beslut",
-                    options=[BESLUT_AVVAKTA, BESLUT_MASKERA, BESLUT_INGEN_MASKERING],
-                    format_func=_BESLUTSETIKETTER.get,
-                    key=beslut_nyckel,
-                )
-                text = kol_text.text_input("Text att maskera", key=text_nyckel)
-                beslut_per_namn[namn] = {"beslut": beslut, "text": text}
-
-            if st.button("Tillämpa maskering"):
-                granskade = bygg_granskade_behov_per_namn(behov_lista, beslut_per_namn)
-                nytt_resultat = uppdatera_efter_granskning(maskeringsresultat, granskade)
-                st.session_state.maskeringsresultat = nytt_resultat
-
-                # Lär in bekräftade namn i den KRYPTERADE maskeringsliggaren + global
-                # sök-och-ersätt i sessionens sie, så namnen förblir maskerade i alla
-                # framtida filer/sessioner. Ej-PII-namn lärs aldrig in.
-                bekräftade = {g.misstänkt_text for g in granskade if g.status == "bekräftad_pii"}
-                if bekräftade:
-                    liggare = dict(st.session_state.maskeringsliggare)
-                    for namn in sorted(bekräftade):
-                        if namn not in liggare:
-                            liggare[namn] = f"[PERSON {len(liggare) + 1}]"
-                    app_config.spara_maskeringsliggare(liggare)
-                    st.session_state.maskeringsliggare = liggare
-                    st.session_state.sie = tillämpa_liggare(st.session_state.sie, liggare)
-
-                # Spegelbilden: namn användaren aktivt markerat som "ingen
-                # maskering" läggs i den krypterade undantagslistan, så
-                # sekretesslagret slutar flagga dem i nya filer och sessioner.
-                undantagna = namn_att_undanta(granskade)
-                if undantagna:
-                    kvar = app_config.lagg_till_undantag(
-                        st.session_state.undantagslista, sorted(undantagna)
+                    kol_val, kol_text = st.columns([2, 2])
+                    beslut = kol_val.radio(
+                        "Beslut",
+                        options=[BESLUT_AVVAKTA, BESLUT_MASKERA, BESLUT_INGEN_MASKERING],
+                        format_func=_BESLUTSETIKETTER.get,
+                        key=beslut_nyckel,
                     )
-                    app_config.spara_undantagslista(kvar)
-                    st.session_state.undantagslista = kvar
+                    text = kol_text.text_input("Text att maskera", key=text_nyckel)
+                    beslut_per_namn[namn] = {"beslut": beslut, "text": text}
 
-                # Kom ihåg de nu sändningsbara verifikaten (Spiris-läge) så de inte
-                # tas med vid nästa hämtning — blockerade sparas INTE (fail-closed).
-                # Fingeravtrycket (svaghet 5) måste räknas på SAMMA representation
-                # som filtrera_bort_sedda ser vid nästa hämtning: den råa
-                # st.session_state.sie, inte de maskerade sandningsbara. Annars
-                # skulle personnummer/fritext skilja sig (maskerad vs rå) och inget
-                # matcha. Vi väljer bara de verifikat vars (serie, vernr) blev
-                # sändningsbara.
-                if datakälla == "Koppla till Spiris" and st.session_state.sie is not None:
-                    _sandningsbar_nycklar = {
-                        (v.serie, v.vernr)
-                        for v in nytt_resultat.sandningsbara_verifikationer
-                    }
-                    lagg_till_maskeringsminne(
-                        verifikation_id(v)
-                        for v in st.session_state.sie.verifikationer
-                        if (v.serie, v.vernr) in _sandningsbar_nycklar
+                if st.button("Tillämpa maskering"):
+                    granskade = bygg_granskade_behov_per_namn(behov_lista, beslut_per_namn)
+                    nytt_resultat = uppdatera_efter_granskning(maskeringsresultat, granskade)
+                    st.session_state.maskeringsresultat = nytt_resultat
+
+                    bekräftade = {g.misstänkt_text for g in granskade if g.status == "bekräftad_pii"}
+                    if bekräftade:
+                        liggare = dict(st.session_state.maskeringsliggare)
+                        for namn in sorted(bekräftade):
+                            if namn not in liggare:
+                                liggare[namn] = f"[PERSON {len(liggare) + 1}]"
+                        app_config.spara_maskeringsliggare(liggare)
+                        st.session_state.maskeringsliggare = liggare
+                        st.session_state.sie = tillämpa_liggare(st.session_state.sie, liggare)
+
+                    undantagna = namn_att_undanta(granskade)
+                    if undantagna:
+                        kvar = app_config.lagg_till_undantag(
+                            st.session_state.undantagslista, sorted(undantagna)
+                        )
+                        app_config.spara_undantagslista(kvar)
+                        st.session_state.undantagslista = kvar
+
+                    if datakälla == "Koppla till Spiris" and st.session_state.sie is not None:
+                        _sandningsbar_nycklar = {
+                            (v.serie, v.vernr)
+                            for v in nytt_resultat.sandningsbara_verifikationer
+                        }
+                        lagg_till_maskeringsminne(
+                            verifikation_id(v)
+                            for v in st.session_state.sie.verifikationer
+                            if (v.serie, v.vernr) in _sandningsbar_nycklar
+                        )
+                    st.success(
+                        f"{len(bekräftade)} namn maskerade, {len(undantagna)} undantagna — "
+                        "Datastatus, Rapporter och AI-Assistent uppdateras utifrån dem."
                     )
-                st.success(
-                    f"{len(bekräftade)} namn maskerade, {len(undantagna)} undantagna — "
-                    "Datastatus, Rapporter och AI-Assistent uppdateras utifrån dem."
-                )
-                st.rerun()
+                    st.rerun()
 
-        st.divider()
-        st.subheader("Verifikationsavvikelser")
-        if not avvikelser:
-            st.caption(
-                "Inga obehandlade avvikelser. Avvikelseregeln är ännu inte byggd "
-                "(navigering.hitta_verifikationsavvikelser) — listan är därför tom, "
-                "inte grönmålad."
-            )
-        else:
-            st.dataframe(
-                [
-                    {"Plats": avvikelse.plats, "Beskrivning": avvikelse.beskrivning}
-                    for avvikelse in avvikelser
-                ],
-                hide_index=True,
-            )
+        if aktivt_filter in ("alla", "avvikelser"):
+            st.divider()
+            st.subheader("⚠️ Verifikationsavvikelser & Bokslutskontroll (Lager 1)")
+            
+            # Hämta fullständiga fyndobjekt från motorn
+            fynd_lista = []
+            try:
+                from bokslutskontroll import kor_kontroller
+                fynd_lista = [f for f in kor_kontroller(sie, idag=date.today()) if f.allvarlighet == "avvikelse"]
+            except Exception:
+                fynd_lista = []
+
+            if not fynd_lista and not avvikelser:
+                st.caption("Inga obehandlade avvikelser.")
+            else:
+                st.write(f"Hittade **{len(fynd_lista) or len(avvikelser)}** avvikelser som kräver granskning eller rättelse. Klicka på valfri avvikelse för att granska underliggande verifikationer, konton och regelhänvisningar:")
+                
+                if fynd_lista:
+                    for i, fynd in enumerate(fynd_lista, 1):
+                        with st.expander(f"🔴 [{fynd.kontroll_id}] {fynd.rubrik}", expanded=(i <= 3)):
+                            st.markdown(f"**Motivering / Analys:** {fynd.motivering}")
+                            
+                            if fynd.belopp is not None:
+                                st.markdown(f"**Berört belopp:** `{formatera_kr(fynd.belopp)}`")
+                            
+                            # Berörda konton
+                            if fynd.konton:
+                                st.markdown("**Berörda konton:**")
+                                konto_rader = []
+                                for knr in fynd.konton:
+                                    kobj = sie.konton.get(knr) if hasattr(sie, "konton") else None
+                                    knamn = kobj.kontonamn if kobj else "—"
+                                    ktyp = kobj.kontotyp if kobj else "—"
+                                    konto_rader.append({"Kontonr": knr, "Kontonamn": knamn, "Typ": ktyp})
+                                st.dataframe(konto_rader, hide_index=True)
+
+                            # Berörda verifikationer med detaljerade transaktioner
+                            if fynd.verifikationer:
+                                st.markdown("**Berörda verifikationer & transaktioner:**")
+                                for v_str in fynd.verifikationer:
+                                    # v_str är t.ex. "A/1" eller "A 1"
+                                    parts = v_str.replace("/", " ").split()
+                                    v_serie = parts[0] if parts else ""
+                                    v_nr = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+                                    
+                                    # Slå upp verifikatet i sie
+                                    match_ver = next(
+                                        (v for v in sie.verifikationer if v.serie == v_serie and v.vernr == v_nr),
+                                        None
+                                    )
+                                    if match_ver:
+                                        st.caption(f"Verifikat **{match_ver.serie} {match_ver.vernr}** ({match_ver.verdatum}) — *{match_ver.vertext or 'Ingen text'}*")
+                                        trans_rader = []
+                                        for t in match_ver.transaktioner:
+                                            kobj = sie.konton.get(t.kontonr) if hasattr(sie, "konton") else None
+                                            knamn = kobj.kontonamn if kobj else ""
+                                            trans_rader.append({
+                                                "Konto": f"{t.kontonr} {knamn}".strip(),
+                                                "Belopp": f"{t.belopp:,.2f} kr".replace(",", " ").replace(".", ","),
+                                                "Text": t.transtext or "",
+                                            })
+                                        st.dataframe(trans_rader, hide_index=True)
+                                    else:
+                                        st.caption(f"Verifikat-ID: **{v_str}**")
+
+                            # Regelhänvisning
+                            if fynd.regel:
+                                st.markdown(f"**Regelhänvisning:** [{fynd.regel.kalla} {fynd.regel.beteckning}]({fynd.regel.lank_manniska})")
+
+                            # Rättelseförslag
+                            if fynd.forslag:
+                                st.markdown(f"**💡 Rättelseförslag:** {fynd.forslag.beskrivning}")
+                                if fynd.forslag.rader:
+                                    st.dataframe(
+                                        [
+                                            {
+                                                "Konto": r.kontonr,
+                                                "Debet": f"{r.debet:,.2f} kr" if r.debet else "—",
+                                                "Kredit": f"{r.kredit:,.2f} kr" if r.kredit else "—",
+                                                "Text": r.text or "",
+                                            }
+                                            for r in fynd.forslag.rader
+                                        ],
+                                        hide_index=True,
+                                    )
+                                if fynd.forslag.forbehall:
+                                    st.caption(f"⚠️ *Förbehåll:* {fynd.forslag.forbehall}")
+                else:
+                    for avvikelse in avvikelser:
+                        with st.expander(f"🔴 {avvikelse.beskrivning}"):
+                            st.write(f"**Plats:** {avvikelse.plats}")
 
 
 
