@@ -93,11 +93,24 @@ with st.sidebar:
     # modell förifylls från .env och persisteras vid ändring.
     with st.expander("AI-inställningar", expanded=False):
 
-        if "ai_leverantör_val" not in st.session_state:
-            st.session_state.ai_leverantör_val = (
-                config.ai_leverantör if config.ai_leverantör in LEVERANTÖRER else LEVERANTÖRER[0]
+        ar_demo = (os.environ.get("SIE_MCP_DEMO") == "1" or "--demo" in sys.argv)
+        _def_lev = config.ai_leverantör if config.ai_leverantör in LEVERANTÖRER else "Anthropic"
+        
+        if ar_demo:
+            _def_lev_idx = LEVERANTÖRER.index(_def_lev) if _def_lev in LEVERANTÖRER else 0
+            vald_leverantör = st.selectbox(
+                "Leverantör",
+                LEVERANTÖRER,
+                index=_def_lev_idx,
+                help="I demoläget tillhandahåller servern Anthropic (Claude)."
             )
-        vald_leverantör = st.selectbox("Leverantör", LEVERANTÖRER, key="ai_leverantör_val")
+            if vald_leverantör != _def_lev:
+                st.info(f"ℹ️ I detta webbdemo är AI-leverantören låst till {_def_lev}. Ladda ner sie-mcp lokalt för att köra mot {vald_leverantör}.")
+                vald_leverantör = _def_lev
+        else:
+            if "ai_leverantör_val" not in st.session_state:
+                st.session_state.ai_leverantör_val = _def_lev
+            vald_leverantör = st.selectbox("Leverantör", LEVERANTÖRER, key="ai_leverantör_val")
 
         if vald_leverantör == "Ollama":
             st.markdown("**Lokal AI (Ollama)**")
