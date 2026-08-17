@@ -172,11 +172,24 @@ with st.sidebar:
         elif ai_konfiguration.status == "modeller_hämtade":
             _modeller = ai_konfiguration.tillgängliga_modeller
             _def_idx = _modeller.index(config.ai_vald_modell) if config.ai_vald_modell in _modeller else 0
-            vald_modell = st.selectbox("Modell", _modeller, index=_def_idx)
-            if vald_modell != ai_konfiguration.vald_modell:
-                ai_konfiguration = replace(ai_konfiguration, vald_modell=vald_modell)
-                st.session_state.ai_konfiguration = ai_konfiguration
-            app_config.spara_om_andrad("ai_vald_modell", vald_modell, config)
+            
+            ar_demo = (os.environ.get("SIE_MCP_DEMO") == "1" or "--demo" in sys.argv)
+            if ar_demo:
+                vald_modell = st.selectbox(
+                    "Modell",
+                    _modeller,
+                    index=_def_idx,
+                    help="I demoläget körs frågorna mot den förvalda standardmodellen."
+                )
+                if vald_modell != _modeller[_def_idx]:
+                    st.info("ℹ️ I detta webbdemo är standardmodellen låst. Ladda ner sie-mcp lokalt för att byta modell fritt.")
+                    vald_modell = _modeller[_def_idx]
+            else:
+                vald_modell = st.selectbox("Modell", _modeller, index=_def_idx)
+                if vald_modell != ai_konfiguration.vald_modell:
+                    ai_konfiguration = replace(ai_konfiguration, vald_modell=vald_modell)
+                    st.session_state.ai_konfiguration = ai_konfiguration
+                app_config.spara_om_andrad("ai_vald_modell", vald_modell, config)
         elif ai_konfiguration.status == "fel":
             st.error(f"Kunde inte hämta modeller: {ai_konfiguration.felmeddelande}")
 
