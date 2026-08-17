@@ -61,10 +61,18 @@ class AppConfig:
 
 
 def las_config(env_fil: Path | None = None) -> AppConfig:
-    """Läser alla persisterade fält ur .env (säker, icke-synkad plats). Saknade
-    fält -> tomma strängar."""
+    """Läser persisterade fält ur .env eller miljövariabler (för webbdrift)."""
+    import os
     värden = dotenv_values(str(_env_sokvag(env_fil)))
-    return AppConfig(**{fält: (värden.get(nyckel) or "") for fält, nyckel in _NYCKLAR.items()})
+    res = {}
+    for fält, nyckel in _NYCKLAR.items():
+        val = värden.get(nyckel) or ("" if env_fil is not None else os.environ.get(nyckel, ""))
+        if not val and env_fil is None and fält == "ai_api_nyckel":
+            val = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY") or ""
+        if not val and env_fil is None and fält == "ai_leverantör" and (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("SIE_MCP_AI_API_NYCKEL")):
+            val = "Anthropic"
+        res[fält] = val
+    return AppConfig(**res)
 
 
 def spara_falt(fält: str, värde: str, env_fil: Path | None = None) -> None:

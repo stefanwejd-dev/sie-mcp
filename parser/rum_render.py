@@ -502,6 +502,26 @@ def rendera_oversikt() -> None:
     else:
         st.caption(f"Datakälla: {datakälla}")
 
+        with st.expander("ℹ️ Om demoläget med SIE4 vs Direkt affärssystems-koppling (Spiris/Visma)", expanded=False):
+            kol_sie, kol_erp = st.columns(2)
+            with kol_sie:
+                st.markdown("### 📄 Vad SIE4-formatet stödjer:")
+                st.markdown(
+                    "- **Fullständig bokföringsanalys:** Grundbok, huvudbok och verifikationstransaktioner.\n"
+                    "- **Bokslutskontroller:** 19 revisions- och integritetskontroller enligt BFL och BAS.\n"
+                    "- **Tidslinje- och månadsavstämning:** Detektering av periodsaldon och kronologiska avvikelser.\n"
+                    "- **ISA 320/450 Väsentlighetsanalys:** Automatisk tröskelvärdesberäkning och felaktighetstabell.\n"
+                    "- **Finansiella rapporter:** Balans- och resultaträkning med kassaflödesanalys."
+                )
+            with kol_erp:
+                st.markdown("### ⚡ Vad en direkt API-koppling (Spiris/Visma) ger utöver SIE4:")
+                st.markdown(
+                    "- **Realtidsreskontra:** Öppna kund- och leverantörsfakturor med exakta förfallodatum och åldersanalys.\n"
+                    "- **Bankintegration:** Automatisk inläsning av banktransaktioner och avstämning.\n"
+                    "- **Skapande av förslag (Utkastkön):** AI kan förbereda verifikat, kundfakturor och periodiseringar för mänskligt godkännande.\n"
+                    "- **Direktbokföring & ändringar:** Möjlighet att skicka godkända åtgärder direkt in i affärssystemet."
+                )
+
         st.subheader("Översikt")
         översikt = bygg_oversikt(sie, maskeringsresultat)
         
