@@ -2644,6 +2644,198 @@ async def fraga_myndighetskallor(fraga: str) -> dict:
     }
 
 
+def _bolagsverket_adapter():
+    """Adaptern ur quiet_oppen_data, med källan hämtad ur källregistret.
+
+    Importeras lokalt av samma skäl som fraga_myndighetskallor gör det: paketet
+    drar in httpx och hela källregistret, och en MCP-server som startar utan att
+    någon frågar efter myndighetsdata ska inte betala för det.
+    """
+    # QUIET_OPPEN_DATA_ROOT MÅSTE vara satt innan quiet_oppen_data importeras
+    # första gången: register.py läser den vid modulimport, inte lat. kallor/
+    # ligger i sie-mcps rot, inte i det installerade paketet. parser/quiet_kalla.py
+    # sätter samma variabel, men de här verktygen går inte via den modulen — utan
+    # raden nedan letar biblioteket efter kallregister.yaml inne i .venv och
+    # faller med FileNotFoundError.
+    os.environ.setdefault("QUIET_OPPEN_DATA_ROOT", str(Path(__file__).resolve().parent.parent))
+
+    # Konfigurationen måste också primas. Den delade transporten (som
+    # /organisationer och /dokumentlista går igenom) läser HTTP-cachens sökväg
+    # ur konfigurationen, och biblioteket letar efter `config.toml` medan
+    # sie-mcp har `quiet_config.toml`. konfig.las() cachar i en modulvariabel,
+    # så det räcker att peka ut filen en gång — samma sak parser/quiet_kalla.py
+    # gör innan den startar sina motorer.
+    from quiet_oppen_data import konfig as _konfig
+
+    _konfig.las(Path(__file__).resolve().parent.parent / "quiet_config.toml")
+
+    from quiet_oppen_data.adaptrar.bolagsverket import BolagsverketAdapter
+
+    # Adaptern slår upp källan själv ur källregistret och kastar om den är
+    # blockerad — därför tar konstruktorn inga argument.
+    return BolagsverketAdapter()
+
+
+def _bolagsverket_falt(utkast) -> dict:
+    """Faktautkasten till en flat ordbok, med källuppgiften bevarad."""
+    return {
+        "uppgifter": {u.etikett: u.varde for u in utkast},
+        "myndighet": utkast[0].myndighet if utkast else "Bolagsverket",
+        "licens": utkast[0].licens if utkast else "",
+    }
+
+
+@mcp.tool()
+async def bolagsverket_organisation(organisationsnummer: str) -> dict:
+    """Grunduppgifter om en svensk organisation ur Bolagsverkets register:
+    namn, organisationsform, juridisk form, registreringsdatum, postadress,
+    SNI-koder, verksamhetsbeskrivning, om organisationen är verksam och
+    eventuell avregistrering.
+
+    Använd detta när frågan gäller ett **namngivet bolag** och du har eller kan
+    få dess organisationsnummer — t.ex. att kontrollera en motpart i en
+    leverantörsfaktura, eller att verifiera att ett bolag i SIE-filens
+    metadata verkligen finns och är verksamt.
+
+    Källan är Bolagsverkets API för värdefulla datamängder — myndighetens egna
+    uppgifter, inte en kommersiell katalog. Den bär **inga** uppgifter om
+    fysiska personer: styrelse, firmatecknare och verkliga huvudmän ligger i
+    andra API:er som medvetet inte används här.
+
+    Hittar registret inget svarar verktyget med tom `uppgifter` — det gissar
+    aldrig fram ett bolag."""
+    # Samma villkorsspärr som övriga myndighetsverktyg: ett utgående anrop med
+    # ett organisationsnummer som kommer från AI-klienten.
+    if not _villkor_godkanda():
+        return _sparrat_svar({"uppgifter": {}, "myndighet": "", "licens": ""}, "fel")
+
+    from quiet_oppen_data.modeller import Fragplan
+
+    try:
+        adapter = _bolagsverket_adapter()
+        utkast = adapter.hamta(
+            Fragplan(fraga="", extra={"identitetsbeteckning": organisationsnummer})
+        )
+    except Exception as e:  # noqa: BLE001 — ett API-fel ska rapporteras, inte krascha servern
+        _logga_lokalt("Bolagsverket-uppslag misslyckades", e)
+        return {"uppgifter": {}, "myndighet": "Bolagsverket", "licens": "", "fel": str(e)}
+
+    if not utkast:
+        return {
+            "uppgifter": {},
+            "myndighet": "Bolagsverket",
+            "licens": "",
+            "fel": f"Inget svar för {organisationsnummer!r}.",
+        }
+    return _bolagsverket_falt(utkast)
+
+
+@mcp.tool()
+async def bolagsverket_arsredovisningar(organisationsnummer: str) -> dict:
+    """Listar de årsredovisningar en organisation lämnat in **digitalt** till
+    Bolagsverket (iXBRL), med rapporteringsperiod och inlämningsdatum.
+
+    OBS: en tom lista betyder INTE att bolaget saknar årsredovisning. Bara
+    digitalt inlämnade handlingar finns i registret; pappersinlämnade år saknas
+    helt. Säg det till användaren i stället för att dra slutsatsen att bolaget
+    inte redovisat."""
+    if not _villkor_godkanda():
+        return _sparrat_svar({"arsredovisningar": [], "myndighet": ""}, "fel")
+
+    from quiet_oppen_data.modeller import Fragplan
+
+    try:
+        adapter = _bolagsverket_adapter()
+        utkast = adapter.hamta(
+            Fragplan(
+                fraga="",
+                extra={
+                    "identitetsbeteckning": organisationsnummer,
+                    "verktyg": "bolagsverket_hvd_dokumentlista",
+                },
+            )
+        )
+    except Exception as e:  # noqa: BLE001
+        _logga_lokalt("Bolagsverket-dokumentlista misslyckades", e)
+        return {"arsredovisningar": [], "myndighet": "Bolagsverket", "fel": str(e)}
+
+    return {
+        "arsredovisningar": [{"etikett": u.etikett, "varde": u.varde} for u in utkast],
+        "myndighet": "Bolagsverket",
+        "not": (
+            "Endast digitalt inlämnade handlingar. En tom lista betyder inte "
+            "att årsredovisning saknas."
+        ),
+    }
+
+
+@mcp.tool()
+async def bolagsverket_arsredovisning_innehall(dokumentid: str) -> dict:
+    """Läser INNEHÅLLET i en årsredovisning som lämnats in digitalt till
+    Bolagsverket och returnerar de taggade XBRL-posterna: nettoomsättning,
+    rörelseresultat, resultat från andelar i koncernföretag, årets resultat,
+    eget kapital, summa tillgångar, kassa och bank, skulder och medelantalet
+    anställda — var och en med den period den avser.
+
+    Kräver ett `dokumentid` från `bolagsverket_arsredovisningar`. Det verktyget
+    säger att handlingen finns; det här säger vad som står i den.
+
+    TVÅ SAKER ATT SÄGA TILL ANVÄNDAREN:
+
+    1. **Enheterna skiljer sig inom samma dokument.** Flerårsöversikten i
+       förvaltningsberättelsen står i TUSENTAL kronor, medan resultat- och
+       balansräkningen står i kronor. Verktyget räknar inte om — det lämnar
+       talet som det står. Jämför aldrig två poster utan att först kontrollera
+       att de har samma enhet.
+    2. Posterna är **avlästa, inte beräknade**. Nyckeltal, marginaler och
+       förändringar mellan år finns inte här. Räkna dem inte själv i svaret
+       utan att säga att du gjort det.
+
+    Bara digitalt inlämnade handlingar finns. Saknas ett år betyder det att
+    handlingen lämnats på papper — inte att bolaget inte redovisat."""
+    if not _villkor_godkanda():
+        return _sparrat_svar({"poster": [], "myndighet": ""}, "fel")
+
+    from quiet_oppen_data.modeller import Fragplan
+
+    try:
+        adapter = _bolagsverket_adapter()
+        utkast = adapter.hamta(
+            Fragplan(
+                fraga="",
+                extra={
+                    "dokumentid": dokumentid,
+                    "verktyg": "bolagsverket_hvd_dokument",
+                },
+            )
+        )
+    except Exception as e:  # noqa: BLE001 — ett API-fel ska rapporteras, inte krascha servern
+        _logga_lokalt("Bolagsverket-dokument misslyckades", e)
+        return {"poster": [], "myndighet": "Bolagsverket", "fel": str(e)}
+
+    if not utkast:
+        return {
+            "poster": [],
+            "myndighet": "Bolagsverket",
+            "fel": (
+                f"Inga läsbara poster i {dokumentid!r}. Handlingen kan sakna "
+                f"XBRL-taggning eller inte finnas."
+            ),
+        }
+
+    return {
+        "poster": [
+            {"post": u.etikett, "period": u.period or "", "varde": u.varde} for u in utkast
+        ],
+        "myndighet": "Bolagsverket",
+        "licens": utkast[0].licens,
+        "not": (
+            "Avlästa värden, inte beräknade. Flerårsöversikten står i tusental "
+            "kronor, resultat- och balansräkningen i kronor."
+        ),
+    }
+
+
 @mcp.tool()
 async def hamta_regeltext(kontroll_id: str) -> dict:
     """Hämtar den faktiska lagtexten för paragrafen som ett bokslutskontroll-

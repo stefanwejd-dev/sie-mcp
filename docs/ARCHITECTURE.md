@@ -2312,3 +2312,64 @@ fungerar** — den öppna frågan gäller bara om http vore enklare.
   kassaflödesanalys och likviditetsprognos inte exponeras. Båda är
   inaktuella — sessionen skapas via appens inloggning och sparas DPAPI-skyddad
   som `secrets\.spiris_session`, och båda verktygen finns.
+
+---
+
+## Bolagsverket — tre MCP-verktyg mot myndighetens fria API (2026-08-29)
+
+Direkta, strukturerade uppslag mot Bolagsverkets **API för värdefulla
+datamängder**. Skiljer sig från `fraga_myndighetskallor` på en punkt som spelar
+roll: de här verktygen returnerar **registrets fält**, inte en modellformulerad
+text. Ingen syntes, ingen tolkning, inga fotnoter — bara uppgiften och dess
+dataproducent.
+
+| Verktyg | Ger |
+|---|---|
+| `bolagsverket_organisation` | Namn, form, juridisk form, registreringsdatum, postadress, SNI, verksamhetsbeskrivning, verksam, och de uttryckliga **nekandena** |
+| `bolagsverket_arsredovisningar` | Digitalt inlämnade handlingar med period och dokument-id |
+| `bolagsverket_arsredovisning_innehall` | Årsredovisningens taggade XBRL-poster per period |
+
+### Vad de INTE gör
+
+De rör en av Bolagsverkets sju gateway-kontexter. `/foretagsinformation/v4`
+(styrelse, historik) är avtalsbundet och avgiftsbelagt. `/verkliga-huvudman/v1`
+bär personuppgifter om fysiska personer och är **spärrad i källregistret**
+(`bolagsverket_verkliga_huvudman`, `blockerad: true`). Att öppna den är ett
+beslut som ska skrivas, inte en bas-URL som ändras.
+
+### Två fällor som är kodade, inte kommenterade
+
+**Enheterna skiljer sig inom samma årsredovisning.** Flerårsöversikten står i
+tusental kronor, resultat- och balansräkningen i kronor. Verktyget räknar inte
+om — det lämnar talet som det står och säger det i sin docstring, så att
+modellen säger det vidare i stället för att jämföra två tal med olika enhet.
+
+**Nekandet är ett svar.** Att ett bolag *inte* är avregistrerat och att ingen
+spärr är registrerad är uppgifter i sig — för den som kontrollerar en motpart
+ofta hela poängen. De emitteras uttryckligen av adaptern sedan quiet_chatt steg
+22; tidigare fanns de inte som fakta alls och kunde därför inte nämnas.
+
+### Integration mot quiet_oppen_data — två variabler som måste sättas
+
+`_bolagsverket_adapter()` gör två saker innan biblioteket importeras, och båda
+är nödvändiga:
+
+1. `QUIET_OPPEN_DATA_ROOT` pekas mot sie-mcps rot. `register.py` läser den vid
+   **modulimport**, inte lat, och `kallor/` ligger i sie-mcps rot — inte i det
+   installerade paketet. Utan den letar biblioteket efter `kallregister.yaml`
+   inne i `.venv` och faller med `FileNotFoundError`.
+2. `konfig.las()` primas med `quiet_config.toml`. Den delade transporten läser
+   HTTP-cachens sökväg ur konfigurationen, och biblioteket letar efter
+   `config.toml` medan sie-mcp har `quiet_config.toml`. `konfig.las()` cachar i
+   en modulvariabel, så det räcker att peka ut filen en gång.
+
+`parser/quiet_kalla.py` gör motsvarande för syntesmotorn. De här verktygen går
+inte via den modulen och måste därför göra det själva — vilket upptäcktes genom
+att `/organisationer` gav noll fakta medan `/dokument` gav trettiosju, eftersom
+dokumenthämtningen medvetet går förbi den delade transporten (binär zip).
+
+### Villkorsspärren
+
+Alla tre ligger bakom `_villkor_godkanda()`, som `fraga_myndighetskallor`. Ett
+organisationsnummer som kommer från AI-klienten skickas till en myndighet; inget
+utflöde sker innan en människa godkänt villkoren.

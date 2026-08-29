@@ -294,6 +294,42 @@ def test_fraga_myndighetskallor_sparras_utan_godkannande():
     assert svar["kallor"] == []
 
 
+def test_bolagsverket_organisation_sparras_utan_godkannande():
+    """Verktyget skickar ett organisationsnummer som kommer från AI-klienten
+    till en myndighet. Ett utflöde är ett utflöde oavsett mottagare — även när
+    mottagaren är Bolagsverket och uppgiften är offentlig."""
+    svar = asyncio.run(server_modul.bolagsverket_organisation("556861-2351"))
+    assert svar["fel"] == compliance.SPARRTEXT_KORT
+    assert svar["uppgifter"] == {}
+
+
+def test_bolagsverket_arsredovisningar_sparras_utan_godkannande():
+    svar = asyncio.run(server_modul.bolagsverket_arsredovisningar("556861-2351"))
+    assert svar["fel"] == compliance.SPARRTEXT_KORT
+    assert svar["arsredovisningar"] == []
+
+
+def test_bolagsverket_arsredovisning_innehall_sparras_utan_godkannande():
+    svar = asyncio.run(server_modul.bolagsverket_arsredovisning_innehall("abc_paket"))
+    assert svar["fel"] == compliance.SPARRTEXT_KORT
+    assert svar["poster"] == []
+
+
+def test_ingen_utgaende_trafik_till_bolagsverket_utan_godkannande(monkeypatch):
+    """Spärren måste ligga FÖRE adaptern konstrueras — inte efter.
+
+    Adaptern hämtar en OAuth2-token redan vid första anropet, så en spärr som
+    sitter efter konstruktionen har redan läckt ett anrop när den slår till."""
+
+    def _far_inte_anropas(*a, **k):
+        raise AssertionError("adaptern konstruerades trots spärrat läge")
+
+    monkeypatch.setattr(server_modul, "_bolagsverket_adapter", _far_inte_anropas)
+    asyncio.run(server_modul.bolagsverket_organisation("556861-2351"))
+    asyncio.run(server_modul.bolagsverket_arsredovisningar("556861-2351"))
+    asyncio.run(server_modul.bolagsverket_arsredovisning_innehall("abc_paket"))
+
+
 def test_ingen_utgaende_trafik_fran_juridikverktyget_utan_godkannande(monkeypatch):
     """Spärren måste ligga FÖRE nätverksanropet (och Anthropic-anropet), inte
     efter. quiet_kalla importeras lazy inuti verktyget — patchar modulen
@@ -347,6 +383,8 @@ def test_alla_registrerade_verktyg_har_ett_sparrtest():
         | {"forbered_saljdokumentutskick", "forbered_efakturautskick",
            "forbered_saljdokumentatgard"}
         | {"fraga_myndighetskallor", "hamta_regeltext"}
+        | {"bolagsverket_organisation", "bolagsverket_arsredovisningar",
+           "bolagsverket_arsredovisning_innehall"}
         | {"forbered_leverantorsfakturautkast", "forbered_attest",
            "forbered_leverantorsbetalning"}
         | {"forbered_masterdataandring", "forbered_masterdataborttagning"}
