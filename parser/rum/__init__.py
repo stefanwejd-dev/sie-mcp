@@ -12,6 +12,7 @@ from .data import RUM_DATA
 from .foretagsdata import RUM_FORETAGSDATA
 from .saljdokument import RUM_SALJDOKUMENT
 from .bokslut import RUM_BOKSLUT
+from .bolagsverket import RUM_BOLAGSVERKET
 
 RUM = (
     RUM_OVERSIKT,
@@ -28,4 +29,5 @@ RUM = (
     RUM_FORETAGSDATA,
     RUM_DATA,
     RUM_SALJDOKUMENT,
+    RUM_BOLAGSVERKET,
 )

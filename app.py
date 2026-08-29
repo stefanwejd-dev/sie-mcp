@@ -25,6 +25,7 @@ from rum import (
     RUM_SALJDOKUMENT
 )
 import rum_render
+import bolagsverket_vy
 import utkast
 from ai_konfiguration import AIKonfiguration, LEVERANTÖRER, uppdatera_med_hamtade_modeller
 from dataclasses import replace
@@ -294,6 +295,7 @@ sidor = {
     ],
     "Data": [
         data_page,
+        st.Page(bolagsverket_vy.rendera_bolagsverket,   title="Bolagsverket",       icon="🏛️", url_path="bolagsverket"),
     ],
 }
 import kommandofalt

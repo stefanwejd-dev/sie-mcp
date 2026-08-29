@@ -23,6 +23,7 @@ def test_rum_i_ratt_ordning():
         "foretagsdata",
         "data",
         "saljdokument",
+        "bolagsverket",
     ]
 
 def test_alla_rum_har_unikt_url_path():
@@ -87,7 +88,8 @@ def test_app_py_navigering_grupper():
                         elif isinstance(el, ast.Name) and el.id == "data_page":
                             url_paths.add("data")
                             
-    assert total_pages == 14, f"Förväntade 14 rum i navigeringen, hittade {total_pages}"
+    # 15 sedan 2026-08-29: Bolagsverket tillkom under gruppen Data.
+    assert total_pages == 15, f"Förväntade 15 rum i navigeringen, hittade {total_pages}"
     
     # Verify all rooms exist
     ids = {r.id for r in rum.RUM}
