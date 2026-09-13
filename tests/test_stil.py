@@ -33,7 +33,10 @@ def test_harkomstmarken_ar_unika():
 
 def test_global_css_innehaller_tabular_nums():
     css = global_css(BAKGRUND_LJUS)
-    assert "font-variant-numeric: tabular-nums;" in css
+    # lining-nums kom till med designjusteringen 2026-09-13: tabulära siffror
+    # ger alla siffror samma bredd, lining-nums samma höjd. Det är tillsammans
+    # de gör en kolumn jämförbar, så kravet skärps till att omfatta båda.
+    assert "font-variant-numeric: tabular-nums lining-nums;" in css
 
 def test_global_css_saknar_sticky_nav():
     css = global_css(BAKGRUND_LJUS)

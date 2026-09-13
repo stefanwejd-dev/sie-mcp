@@ -68,6 +68,12 @@ Godkännandet gäller den dator och det användarkonto där det gjorts. Det kan 
 streamlit run app.py
 ```
 
+Appen bär Quiet-paletten via `.streamlit/config.toml`. Värdena är quiet.nu:s
+egna designtokens ordagrant — familjen ska kännas igen mellan sajten,
+chattwidgeten och den här appen. Belopp i chattens tabeller sätts med tabulära
+siffror (`parser/stil.py`), så att kolumner går att jämföra med ögat. Temat
+läses vid start; ändrar du filen behöver Streamlit startas om.
+
 Under **Rapporter** finns ett fält med snabbvyer — utestående och förfallna
 kund- respektive leverantörsfakturor, åldersanalys och påminnelseförslag.
 Vyerna beräknas **lokalt och utan AI-anrop**, och fungerar därför även utan

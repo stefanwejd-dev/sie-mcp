@@ -126,7 +126,7 @@ def global_css(bakgrund: str) -> str:
 }}
 .sie-chatt-tabell .sie-hoger {{
     text-align: right;
-    font-variant-numeric: tabular-nums;
+    font-variant-numeric: tabular-nums lining-nums;
     white-space: nowrap;
 }}
 .sie-chatt-tabell tbody tr.sie-summa-rad td {{
@@ -139,6 +139,29 @@ def global_css(bakgrund: str) -> str:
     font-size: 0.95rem;
     margin: 0.5rem 0 0.15rem 0;
 }}
+/* Tal som står i kolumn eller jämförs ska gå att jämföra med ögat:
+   tabular-nums ger alla siffror samma bredd, lining-nums samma höjd.
+   Samma regel bär sajten (klassen tal) och chattwidgeten (klassen qw-tal) —
+   familjens gemensamma detalj, inte en lokal smaksak.
+
+   Två avgränsningar, båda medvetna:
+
+   * Streamlits dataframe-grid rörs INTE. Den ritar sina celler själv och
+     slåss emot varje regel utifrån — förlusten är större än vinsten.
+   * Tabeller som markdown renderar (en TextBlock med en markdown-tabell i)
+     rörs inte heller, trots att de vore rätt att träffa. De saknar
+     sie--klass, och TestCss i testsviten upprätthåller att varje regel här
+     är sie--scopad — annars drogs appens rapport- och reskontratabeller med.
+     Att luckra upp den invarianten är ett beslut för en människa, inte en
+     bieffekt av en designjustering.
+
+   Kommentaren undviker punkt-följt-av-bokstav med flit: testet läser hela
+   den här strängen och tolkar varje sådan träff som ett klassnamn. */
+.sie-chatt-tabell th,
+.sie-chatt-tabell td {{
+    font-variant-numeric: tabular-nums lining-nums;
+}}
+
 .sie-harkomst {{
     opacity: 0.55; 
     font-size: 0.85em; 

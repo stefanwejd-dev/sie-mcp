@@ -1,0 +1,29 @@
+# Quiet-paletten i Streamlit.
+#
+# Värdena är quiet.nu:s egna designtokens, ordagrant ur
+# hemsida/public_html/tillgangar/css/tokens.css — inga nya kulörer uppfinns
+# här. Familjen ska kännas igen mellan sajten, chattwidgeten och den här
+# appen; det är hela poängen med att kopiera värdena i stället för att
+# approximera dem.
+#
+#   terra-dark #913814  ->  primaryColor            knappar, accenter
+#   cream      #fcf4eb  ->  backgroundColor         sidans botten
+#   paper      #fffbf7  ->  secondaryBackgroundColor paneler, sidofält
+#   ink        #291c15  ->  textColor
+#
+# Nyckelnamnen och font-värdet är avlästa i den installerade Streamlit-
+# versionen (1.61.1, streamlit/config.py). Två saker att veta om font:
+# generiska familjer skrivs med bindestreck ("sans-serif"), inte som det
+# äldre enum-värdet "sans serif", och värdet får vara en kommaseparerad
+# lista med reserver.
+#
+# Appen körs i ett läge i taget. Streamlit 1.61 kan dela upp temat i
+# [theme.light] och [theme.dark] — quiet.nu har redan en mörk palett i samma
+# tokens.css om det någon gång ska läggas till.
+
+[theme]
+primaryColor            = "#913814"
+backgroundColor         = "#fcf4eb"
+secondaryBackgroundColor = "#fffbf7"
+textColor               = "#291c15"
+font                    = "sans-serif"
